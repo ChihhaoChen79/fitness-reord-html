@@ -1,0 +1,1655 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="健身紀錄">
+<meta name="theme-color" content="#111114">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%8B%3C/text%3E%3C/svg%3E">
+<title>健身訓練追蹤</title>
+<script src="vendor/chart.umd.js"></script>
+<style>
+  /* ---- 輕量工具類（取代 Tailwind CDN，避免執行時需要網路連線） ---- */
+  .flex{display:flex} .grid{display:grid} .grid-cols-6{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .flex-col{flex-direction:column} .flex-wrap{flex-wrap:wrap} .flex-1{flex:1 1 0%} .shrink-0{flex-shrink:0}
+  .fixed{position:fixed} .sticky{position:sticky} .top-0{top:0} .bottom-0{bottom:0} .left-0{left:0} .right-0{right:0}
+  .z-10{z-index:10} .z-40{z-index:40}
+  .w-5{width:20px} .w-8{width:32px} .w-14{width:56px} .w-20{width:80px} .w-full{width:100%}
+  .h-8{height:32px} .h-14{height:56px} .h-48{height:192px} .h-full{height:100%}
+  .min-h-screen{min-height:100vh} .min-w-0{min-width:0} .max-w-lg{max-width:32rem} .mx-auto{margin-left:auto;margin-right:auto}
+  .p-3{padding:12px} .p-4{padding:16px}
+  .px-2{padding-left:8px;padding-right:8px} .px-4{padding-left:16px;padding-right:16px}
+  .py-2{padding-top:8px;padding-bottom:8px} .py-3{padding-top:12px;padding-bottom:12px}
+  .py-4{padding-top:16px;padding-bottom:16px} .py-6{padding-top:24px;padding-bottom:24px} .py-8{padding-top:32px;padding-bottom:32px}
+  .pb-1{padding-bottom:4px} .pb-3{padding-bottom:12px} .pb-8{padding-bottom:32px} .pb-24{padding-bottom:96px}
+  .pt-safe{padding-top:calc(14px + env(safe-area-inset-top))}
+  .mb-1{margin-bottom:4px} .mb-1\.5{margin-bottom:6px} .mb-2{margin-bottom:8px} .mb-3{margin-bottom:12px} .mb-4{margin-bottom:16px} .mb-5{margin-bottom:20px}
+  .mt-0\.5{margin-top:2px} .mt-1{margin-top:4px} .mt-1\.5{margin-top:6px} .mt-2{margin-top:8px} .mt-3{margin-top:12px} .mt-4{margin-top:16px} .mt-6{margin-top:24px}
+  .ml-1{margin-left:4px}
+  .gap-0\.5{gap:2px} .gap-1{gap:4px} .gap-2{gap:8px} .gap-3{gap:12px} .gap-4{gap:16px}
+  .space-y-3>*+*{margin-top:12px}
+  .font-bold{font-weight:700} .font-extrabold{font-weight:800} .font-semibold{font-weight:600} .font-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .text-2xs{font-size:10px} .text-xs{font-size:12px} .text-sm{font-size:14px} .text-base{font-size:16px} .text-lg{font-size:18px} .text-xl{font-size:20px} .text-2xl{font-size:24px}
+  .text-center{text-align:center} .text-left{text-align:left}
+  .rounded-lg{border-radius:8px} .rounded-xl{border-radius:12px} .rounded-2xl{border-radius:16px}
+  .items-center{align-items:center} .items-start{align-items:flex-start}
+  .justify-between{justify-content:space-between} .justify-center{justify-content:center}
+  .overflow-hidden{overflow:hidden} .overflow-x-auto{overflow-x:auto} .overflow-y-auto{overflow-y:auto}
+  .object-cover{object-fit:cover} .truncate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .opacity-80{opacity:.8} .opacity-90{opacity:.9} .hidden{display:none}
+
+  :root{
+    --bg:#f2f2f5; --card:#ffffff; --text:#16161a; --text2:#6b7280;
+    --border:#e5e7eb; --primary:#4f46e5; --primary-ink:#ffffff;
+    --danger:#ef4444; --accent:#f97316; --input-bg:#f7f7f9;
+  }
+  html.dark{
+    --bg:#0b0b0d; --card:#18181b; --text:#f4f4f5; --text2:#9ca3af;
+    --border:#2a2a2e; --primary:#6366f1; --primary-ink:#ffffff;
+    --danger:#f87171; --accent:#fb923c; --input-bg:#0f0f12;
+  }
+  *{ -webkit-tap-highlight-color: transparent; }
+  html,body{ background:var(--bg); color:var(--text); }
+  body{ font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Helvetica Neue",Arial,sans-serif; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:16px; }
+  .input, select.input, textarea.input{
+    background:var(--input-bg); border:1px solid var(--border); color:var(--text);
+    border-radius:10px; padding:8px 10px; width:100%; font-size:14px;
+  }
+  .btn{ border-radius:12px; padding:10px 16px; font-weight:600; font-size:14px; text-align:center; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+  .btn-primary{ background:var(--primary); color:var(--primary-ink); }
+  .btn-secondary{ background:var(--input-bg); color:var(--text); border:1px solid var(--border); }
+  .btn-danger{ background:var(--danger); color:#fff; }
+  .btn-ghost{ color:var(--primary); }
+  .chip{ border-radius:999px; padding:5px 12px; font-size:12px; font-weight:600; border:1px solid var(--border); background:var(--input-bg); color:var(--text2); white-space:nowrap; }
+  .chip.active{ background:var(--primary); color:#fff; border-color:var(--primary); }
+  .placeholder-img{ background:#0a0a0c; display:flex; align-items:center; justify-content:center; color:#3f3f46; }
+  ::-webkit-scrollbar{ display:none; }
+  .no-scrollbar{ -ms-overflow-style:none; scrollbar-width:none; }
+  #bottomnav{ padding-bottom: env(safe-area-inset-bottom); }
+  #modalRoot:empty{ display:none; }
+  .modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:50; display:flex; align-items:flex-end; justify-content:center; }
+  .modal-sheet{ background:var(--card); color:var(--text); width:100%; max-width:520px; max-height:88vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:16px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  @media (min-width:640px){ .modal-overlay{ align-items:center; } .modal-sheet{ border-radius:20px; max-height:80vh; } }
+  #toastRoot{ position:fixed; top: calc(12px + env(safe-area-inset-top)); left:0; right:0; z-index:60; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; }
+  .toast{ background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:14px; padding:12px 18px; box-shadow:0 8px 24px rgba(0,0,0,.18); font-size:14px; max-width:90%; text-align:center; }
+  .set-row input{ text-align:center; }
+  .fab{ position:fixed; right:16px; bottom:calc(80px + env(safe-area-inset-bottom)); z-index:30; }
+</style>
+</head>
+<body>
+<div id="app" class="max-w-lg mx-auto min-h-screen"></div>
+<nav id="bottomnav" class="fixed bottom-0 left-0 right-0 z-40" style="background:var(--card); border-top:1px solid var(--border);">
+  <div class="max-w-lg mx-auto grid grid-cols-6 text-center">
+    <button onclick="App.setTab('home')" data-navtab="home" class="navbtn py-2 flex flex-col items-center gap-0.5">
+      <span class="text-lg">🏠</span><span class="text-2xs">首頁</span>
+    </button>
+    <button onclick="App.setTab('exercises')" data-navtab="exercises" class="navbtn py-2 flex flex-col items-center gap-0.5">
+      <span class="text-lg">📚</span><span class="text-2xs">動作庫</span>
+    </button>
+    <button onclick="App.setTab('templates')" data-navtab="templates" class="navbtn py-2 flex flex-col items-center gap-0.5">
+      <span class="text-lg">📋</span><span class="text-2xs">菜單</span>
+    </button>
+    <button onclick="App.setTab('history')" data-navtab="history" class="navbtn py-2 flex flex-col items-center gap-0.5">
+      <span class="text-lg">🗂️</span><span class="text-2xs">紀錄</span>
+    </button>
+    <button onclick="App.setTab('stats')" data-navtab="stats" class="navbtn py-2 flex flex-col items-center gap-0.5">
+      <span class="text-lg">📈</span><span class="text-2xs">統計</span>
+    </button>
+    <button onclick="App.setTab('settings')" data-navtab="settings" class="navbtn py-2 flex flex-col items-center gap-0.5">
+      <span class="text-lg">⚙️</span><span class="text-2xs">我的</span>
+    </button>
+  </div>
+</nav>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================== 常數 ============================== */
+const CATEGORIES = ['胸','背','腿','肩','手臂','核心','有氧'];
+const EQUIPMENT = ['槓鈴','啞鈴','史密斯機','壺鈴','機械','自身體重','滑輪機','跑步機','飛輪車','划船機','登階機','無'];
+const DEFAULT_TAGS = ['測PR','力量組','跳躍力訓練日','恢復日','高強度'];
+
+const MOTIVATION_BASE = [
+  '💪 太棒了！又完成了一次訓練！','🔥 又向強者靠近了一步！','🌟 你的身體會記住每一次訓練！',
+  '⚡ 今天的你打敗了昨天的你！','🚀 健身沒有終點，只有下一個目標！','😎 肌肉記憶就是這樣養成的！',
+  '🏋️ 你就是你想成為的那個人的原型！','🎊 每一滴汗水都不會白流！','🦵 這場訓練最考驗意志力，你做到了！',
+  '🥇 自律的人，運氣都不會太差！','🧠 身體很誠實，它已經變得更強了！','🌈 訓練完的感覺，最踏實！',
+  '🍀 出門就贏了一半，你今天完賽了！','🔋 訓練完，能量反而更滿了對吧？','🧗 一步一步，你正在往上爬！',
+  '🎵 汗水是身體給努力的掌聲！','🛡️ 你正在為未來的自己打造盔甲！','🌤️ 無論今天狀態如何，你都出現了，這就贏了！',
+  '🏁 又完成一次的你，值得被稱讚！','💥 爆發力+耐力，你今天都展現了！'
+];
+const MOTIVATION_COUNT = [
+  '🎯 這是這個月第 {count} 次訓練了，保持這個節奏！','💯 本月已完成 {count} 次訓練，你是自律的王者！',
+  '📅 本月第 {count} 次報到，持續前進中！'
+];
+const MOTIVATION_STREAK = [
+  '🔥 連續 {streak} 天訓練，你的意志力無人能敵！','⚡ 已經連續 {streak} 天沒有間斷，太猛了！',
+  '🏆 連續 {streak} 天，習慣正在成形！'
+];
+
+/* ============================== 工具 ============================== */
+function uid(){
+  if (crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+function nowISO(){ return new Date().toISOString(); }
+function escapeHtml(s){
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function pad2(n){ return n < 10 ? '0'+n : ''+n; }
+function fmtDate(d){
+  d = new Date(d);
+  return `${d.getFullYear()}/${pad2(d.getMonth()+1)}/${pad2(d.getDate())}`;
+}
+function fmtDateShort(d){
+  d = new Date(d);
+  return `${pad2(d.getMonth()+1)}/${pad2(d.getDate())}`;
+}
+function fmtTime(d){
+  d = new Date(d);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function fmtDuration(min){
+  min = Math.round(min);
+  if (min < 60) return `${min} 分鐘`;
+  const h = Math.floor(min/60), m = min % 60;
+  return `${h} 小時 ${m} 分鐘`;
+}
+function debounce(fn, ms){
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(()=>fn(...args), ms); };
+}
+function dateKey(d){
+  d = new Date(d);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
+function monthKey(d){
+  d = new Date(d);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
+}
+function isoWeekKey(d){
+  d = new Date(d);
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (tmp.getUTCDay() + 6) % 7;
+  tmp.setUTCDate(tmp.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(tmp.getUTCFullYear(),0,4));
+  const week = 1 + Math.round(((tmp - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay()+6)%7)) / 7);
+  return `${tmp.getUTCFullYear()}-W${pad2(week)}`;
+}
+
+/* ---- 單位換算：內部一律以公制(kg / km)儲存，顯示時依設定換算 ---- */
+const KG_PER_LB = 0.45359237;
+const KM_PER_MI = 1.609344;
+function unit(){ return State.settings.unit; }
+function weightLabel(){ return unit()==='imperial' ? 'lb' : 'kg'; }
+function distanceLabel(){ return unit()==='imperial' ? 'mi' : 'km'; }
+function toDisplayWeight(kg){
+  if (kg === undefined || kg === null || kg === '') return '';
+  const v = unit()==='imperial' ? kg / KG_PER_LB : kg;
+  return Math.round(v*100)/100;
+}
+function toStoreWeight(display){
+  if (display === undefined || display === null || display === '') return undefined;
+  const n = parseFloat(display); if (isNaN(n)) return undefined;
+  return unit()==='imperial' ? n * KG_PER_LB : n;
+}
+function toDisplayDistance(km){
+  if (km === undefined || km === null || km === '') return '';
+  const v = unit()==='imperial' ? km / KM_PER_MI : km;
+  return Math.round(v*100)/100;
+}
+function toStoreDistance(display){
+  if (display === undefined || display === null || display === '') return undefined;
+  const n = parseFloat(display); if (isNaN(n)) return undefined;
+  return unit()==='imperial' ? n * KM_PER_MI : n;
+}
+
+/* ============================== IndexedDB ============================== */
+const DB_NAME = 'fitnessTrackerDB';
+const DB_VERSION = 1;
+const STORES = ['exercises','templates','records','bodyMetrics','tags'];
+let dbInstance = null;
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      STORES.forEach(name => {
+        if (!db.objectStoreNames.contains(name)){
+          const store = db.createObjectStore(name, { keyPath: 'id' });
+          if (name === 'records') store.createIndex('date', 'date');
+          if (name === 'bodyMetrics') store.createIndex('recordedAt', 'recordedAt');
+        }
+      });
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+async function getDB(){
+  if (!dbInstance) dbInstance = await openDB();
+  return dbInstance;
+}
+async function dbGetAll(store){
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbGet(store, id){
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbPut(store, obj){
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(obj);
+    tx.oncomplete = () => resolve(obj);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function dbBulkPut(store, arr){
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const os = tx.objectStore(store);
+    arr.forEach(o => os.put(o));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function dbDelete(store, id){
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function dbClear(store){
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* ============================== 種子資料 ============================== */
+function seedExercise(name, category, equipment, muscleGroups, uni, trackingType){
+  return {
+    id: uid(), name, category, equipment, muscleGroups,
+    imageUrl: '', description: '', isCustom: false,
+    supportsUnilateral: !!uni, trackingType: trackingType || 'weight_reps'
+  };
+}
+function buildSeedExercises(){
+  const W = 'weight_reps', D = 'distance_reps';
+  return [
+    seedExercise('槓鈴臥推','胸','槓鈴',['胸大肌','三頭肌','前三角肌'],false,W),
+    seedExercise('上斜槓鈴臥推','胸','槓鈴',['胸大肌上部','前三角肌'],false,W),
+    seedExercise('史密斯機臥推','胸','史密斯機',['胸大肌','三頭肌'],false,W),
+    seedExercise('史密斯機上斜臥推','胸','史密斯機',['胸大肌上部'],false,W),
+    seedExercise('啞鈴臥推','胸','啞鈴',['胸大肌','三頭肌'],true,W),
+    seedExercise('上斜啞鈴臥推','胸','啞鈴',['胸大肌上部'],true,W),
+    seedExercise('啞鈴飛鳥','胸','啞鈴',['胸大肌'],true,W),
+    seedExercise('上斜啞鈴飛鳥','胸','啞鈴',['胸大肌上部'],true,W),
+    seedExercise('雙槓撐體（胸部版）','胸','自身體重',['胸大肌下部','三頭肌'],false,W),
+    seedExercise('伏地挺身','胸','自身體重',['胸大肌','三頭肌','核心'],false,W),
+    seedExercise('繩索夾胸','胸','滑輪機',['胸大肌'],false,W),
+    seedExercise('蝴蝶機夾胸','胸','機械',['胸大肌'],false,W),
+
+    seedExercise('引體向上','背','自身體重',['闊背肌','二頭肌'],false,W),
+    seedExercise('滑輪下拉','背','滑輪機',['闊背肌','二頭肌'],false,W),
+    seedExercise('槓鈴划船','背','槓鈴',['中背肌群','闊背肌'],false,W),
+    seedExercise('啞鈴單臂划船','背','啞鈴',['闊背肌','中背肌群'],true,W),
+    seedExercise('槓鈴硬舉','背','槓鈴',['豎脊肌','臀大肌','腿後肌'],false,W),
+    seedExercise('羅馬尼亞硬舉（槓鈴）','背','槓鈴',['腿後肌','臀大肌','下背'],false,W),
+    seedExercise('單腿羅馬尼亞硬舉（啞鈴）','背','啞鈴',['腿後肌','臀大肌','平衡'],true,W),
+    seedExercise('坐姿划船','背','滑輪機',['中背肌群','闊背肌'],false,W),
+    seedExercise('反向飛鳥','背','啞鈴',['後三角肌','中背肌群'],true,W),
+    seedExercise('直臂下拉','背','滑輪機',['闊背肌'],false,W),
+    seedExercise('山羊挺身','背','自身體重',['下背','豎脊肌'],false,W),
+
+    seedExercise('槓鈴深蹲','腿','槓鈴',['股四頭肌','臀大肌'],false,W),
+    seedExercise('史密斯機深蹲','腿','史密斯機',['股四頭肌','臀大肌'],false,W),
+    seedExercise('保加利亞分腿蹲','腿','啞鈴',['股四頭肌','臀大肌'],true,W),
+    seedExercise('腿推機','腿','機械',['股四頭肌','臀大肌'],false,W),
+    seedExercise('腿伸屈機','腿','機械',['股四頭肌'],false,W),
+    seedExercise('俯臥腿彎舉','腿','機械',['腿後肌'],false,W),
+    seedExercise('臀推（槓鈴）','腿','槓鈴',['臀大肌'],false,W),
+    seedExercise('壺鈴擺盪','腿','壺鈴',['臀大肌','腿後肌','核心'],false,W),
+    seedExercise('壺鈴深蹲','腿','壺鈴',['股四頭肌','臀大肌'],false,W),
+    seedExercise('站姿小腿提踵','腿','機械',['小腿肌群'],false,W),
+    seedExercise('弓箭步','腿','啞鈴',['股四頭肌','臀大肌'],true,W),
+
+    seedExercise('槓鈴肩推','肩','槓鈴',['前三角肌','三頭肌'],false,W),
+    seedExercise('史密斯機肩推','肩','史密斯機',['前三角肌','三頭肌'],false,W),
+    seedExercise('啞鈴肩推','肩','啞鈴',['前三角肌','三頭肌'],true,W),
+    seedExercise('阿諾肩推','肩','啞鈴',['前三角肌','中三角肌'],false,W),
+    seedExercise('啞鈴側平舉','肩','啞鈴',['中三角肌'],true,W),
+    seedExercise('啞鈴前平舉','肩','啞鈴',['前三角肌'],true,W),
+    seedExercise('反向飛鳥（肩後束）','肩','啞鈴',['後三角肌'],true,W),
+    seedExercise('壺鈴肩推','肩','壺鈴',['前三角肌','核心'],true,W),
+    seedExercise('繩索側平舉','肩','滑輪機',['中三角肌'],true,W),
+    seedExercise('聳肩','肩','槓鈴',['斜方肌'],false,W),
+
+    seedExercise('槓鈴二頭彎舉','手臂','槓鈴',['二頭肌'],false,W),
+    seedExercise('啞鈴二頭彎舉','手臂','啞鈴',['二頭肌'],true,W),
+    seedExercise('槌式彎舉','手臂','啞鈴',['二頭肌','前臂'],true,W),
+    seedExercise('牧師椅彎舉','手臂','槓鈴',['二頭肌'],true,W),
+    seedExercise('繩索彎舉','手臂','滑輪機',['二頭肌'],false,W),
+    seedExercise('三頭下壓','手臂','滑輪機',['三頭肌'],false,W),
+    seedExercise('過頭三頭伸展','手臂','啞鈴',['三頭肌'],true,W),
+    seedExercise('窄握臥推','手臂','槓鈴',['三頭肌','胸大肌'],false,W),
+    seedExercise('雙槓撐體（三頭版）','手臂','自身體重',['三頭肌'],false,W),
+    seedExercise('壺鈴彎舉','手臂','壺鈴',['二頭肌'],true,W),
+
+    seedExercise('捲腹','核心','自身體重',['腹直肌'],false,W),
+    seedExercise('懸吊抬腿','核心','自身體重',['下腹','髖屈肌'],false,W),
+    seedExercise('俄羅斯轉體','核心','啞鈴',['腹斜肌'],false,W),
+    seedExercise('棒式','核心','自身體重',['核心整體'],false,W),
+    seedExercise('壺鈴土耳其起立','核心','壺鈴',['核心整體','肩部穩定'],true,W),
+
+    seedExercise('跑步機慢跑','有氧','跑步機',['心肺','腿部'],false,D),
+    seedExercise('跑步機衝刺','有氧','跑步機',['心肺','腿部'],false,D),
+    seedExercise('飛輪','有氧','飛輪車',['心肺','股四頭肌'],false,D),
+    seedExercise('划船機','有氧','划船機',['心肺','全身'],false,D),
+    seedExercise('登階機','有氧','登階機',['心肺','臀腿'],false,D),
+    seedExercise('跳繩','有氧','自身體重',['心肺','小腿'],false,D),
+    seedExercise('戶外跑步','有氧','無',['心肺','腿部'],false,D),
+    seedExercise('戶外騎車','有氧','無',['心肺','腿部'],false,D),
+  ];
+}
+async function seedIfEmpty(){
+  const existing = await dbGetAll('exercises');
+  if (existing.length === 0){
+    await dbBulkPut('exercises', buildSeedExercises());
+  }
+  const tags = await dbGetAll('tags');
+  if (tags.length === 0){
+    await dbBulkPut('tags', DEFAULT_TAGS.map(name => ({ id: uid(), name, createdAt: nowISO() })));
+  }
+}
+
+/* ============================== Settings / Draft ============================== */
+const SETTINGS_KEY = 'ft_settings';
+const DRAFT_KEY = 'ft_draft_session';
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return Object.assign({ unit:'metric', theme:'auto', language:'zh-TW' }, JSON.parse(raw));
+  }catch(e){}
+  return { unit:'metric', theme:'auto', language:'zh-TW' };
+}
+function saveSettings(s){
+  try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }catch(e){}
+}
+function applyTheme(theme){
+  const root = document.documentElement;
+  const isDark = theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  root.classList.toggle('dark', isDark);
+}
+function saveDraft(session){
+  try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(session)); }catch(e){}
+}
+function loadDraft(){
+  try{
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} }
+
+/* ============================== State ============================== */
+const State = {
+  tab: 'home',
+  settings: loadSettings(),
+  exercises: [], templates: [], tags: [], records: [], bodyMetrics: [],
+  exercisesView: { category:'全部', equipment:'全部', search:'', subview:'list', editId:null },
+  templatesView: { subview:'list', editId:null, draft:null },
+  historyView: { subview:'list', openId:null, editBuffer:null },
+  statsView: { range:'all', exerciseId:null, volumeScope:'exercise' },
+  session: null,
+  sessionTimerHandle: null,
+  pendingExercisePicker: null, // callback for picker modal
+};
+
+/* ============================== Init ============================== */
+const App = {};
+window.App = App;
+
+App.init = async function(){
+  applyTheme(State.settings.theme);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (State.settings.theme === 'auto') applyTheme('auto');
+  });
+  await seedIfEmpty();
+  await App.reloadAll();
+
+  const draft = loadDraft();
+  if (draft){
+    App.showConfirm('偵測到尚未完成的訓練草稿，要繼續上次的訓練嗎？', '未完成的訓練', '繼續', '捨棄').then(ok => {
+      if (ok){
+        State.session = draft;
+        App.startSessionTimer();
+        App.render();
+      } else {
+        clearDraft();
+        App.render();
+      }
+    });
+  }
+  App.render();
+};
+
+App.reloadAll = async function(){
+  const [exercises, templates, tags, records, bodyMetrics] = await Promise.all([
+    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('tags'), dbGetAll('records'), dbGetAll('bodyMetrics')
+  ]);
+  State.exercises = exercises.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
+  State.templates = templates.sort((a,b)=> new Date(b.updatedAt)-new Date(a.updatedAt));
+  State.tags = tags;
+  State.records = records.sort((a,b)=> new Date(b.startTime)-new Date(a.startTime));
+  State.bodyMetrics = bodyMetrics.sort((a,b)=> new Date(b.recordedAt)-new Date(a.recordedAt));
+};
+
+function exerciseById(id){ return State.exercises.find(e=>e.id===id); }
+function templateById(id){ return State.templates.find(t=>t.id===id); }
+
+/* ============================== Toast / Modal helpers ============================== */
+App.toast = function(msg, ms){
+  const root = document.getElementById('toastRoot');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = msg;
+  root.appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(),300); }, ms || 2600);
+};
+
+App.closeModal = function(){
+  document.getElementById('modalRoot').innerHTML = '';
+};
+App.showModalHtml = function(html){
+  document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this) App.closeModal()"><div class="modal-sheet">${html}</div></div>`;
+};
+App.showConfirm = function(message, title, okText, cancelText){
+  return new Promise(resolve => {
+    App.showModalHtml(`
+      <div class="text-center">
+        ${title ? `<div class="text-base font-bold mb-2">${escapeHtml(title)}</div>` : ''}
+        <div class="text-sm mb-5" style="color:var(--text2)">${escapeHtml(message)}</div>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary flex-1" id="confirmCancelBtn">${escapeHtml(cancelText||'取消')}</button>
+          <button class="btn btn-primary flex-1" id="confirmOkBtn">${escapeHtml(okText||'確認')}</button>
+        </div>
+      </div>
+    `);
+    document.getElementById('confirmOkBtn').onclick = () => { App.closeModal(); resolve(true); };
+    document.getElementById('confirmCancelBtn').onclick = () => { App.closeModal(); resolve(false); };
+  });
+};
+
+/* ============================== Nav ============================== */
+App.setTab = function(tab){
+  if (State.session){ App.toast('請先完成或取消目前的訓練'); return; }
+  State.tab = tab;
+  App.render();
+};
+
+/* ============================== Render root ============================== */
+App.render = function(){
+  document.querySelectorAll('.navbtn').forEach(b=>{
+    const active = b.dataset.navtab === State.tab && !State.session;
+    b.style.color = active ? 'var(--primary)' : 'var(--text2)';
+  });
+  document.getElementById('bottomnav').style.display = State.session ? 'none' : '';
+  document.body.style.paddingBottom = State.session ? '0px' : '';
+
+  const app = document.getElementById('app');
+  if (State.session){ app.innerHTML = renderSession(); attachSessionTimerDisplay(); return; }
+
+  let html = '';
+  switch(State.tab){
+    case 'home': html = renderHome(); break;
+    case 'exercises': html = renderExercisesTab(); break;
+    case 'templates': html = renderTemplatesTab(); break;
+    case 'history': html = renderHistoryTab(); break;
+    case 'stats': html = renderStatsTab(); break;
+    case 'settings': html = renderSettingsTab(); break;
+    default: html = renderHome();
+  }
+  app.innerHTML = html;
+  if (State.tab === 'stats') App.initStatsCharts();
+};
+
+/* ============================== Layout helper ============================== */
+function pageWrap(title, right, body){
+  return `
+    <div class="px-4 pt-safe pb-3 flex items-center justify-between sticky top-0 z-10" style="background:var(--bg);">
+      <h1 class="text-xl font-extrabold">${title}</h1>
+      <div>${right||''}</div>
+    </div>
+    <div class="px-4 pb-8">${body}</div>
+  `;
+}
+
+/* ============================== HOME ============================== */
+function computeStreakDays(){
+  const days = new Set(State.records.map(r => dateKey(r.startTime)));
+  let streak = 0;
+  let cursor = new Date();
+  if (!days.has(dateKey(cursor))){
+    cursor.setDate(cursor.getDate()-1);
+  }
+  while (days.has(dateKey(cursor))){
+    streak++;
+    cursor.setDate(cursor.getDate()-1);
+  }
+  return streak;
+}
+function countThisMonth(){
+  const mk = monthKey(new Date());
+  return State.records.filter(r => monthKey(r.startTime) === mk).length;
+}
+function pickMotivation(){
+  const count = countThisMonth();
+  const streak = computeStreakDays();
+  const pools = [...MOTIVATION_BASE];
+  if (count > 0) MOTIVATION_COUNT.forEach(m => pools.push(m.replace('{count}', count)));
+  if (streak >= 2) MOTIVATION_STREAK.forEach(m => pools.push(m.replace('{streak}', streak)));
+  return pools[Math.floor(Math.random()*pools.length)];
+}
+
+function renderHome(){
+  const recent = State.records.slice(0,3);
+  const streak = computeStreakDays();
+  const monthCount = countThisMonth();
+  const quote = pickMotivation();
+
+  const templateQuick = State.templates.slice(0,4).map(t => `
+    <button onclick="App.startFromTemplate('${t.id}')" class="card p-3 text-left w-full mb-2">
+      <div class="font-bold text-sm">${escapeHtml(t.name)}</div>
+      <div class="text-xs mt-0.5" style="color:var(--text2)">${t.exercises.length} 個動作</div>
+    </button>
+  `).join('') || `<div class="text-sm text-center py-4" style="color:var(--text2)">尚未建立菜單，先去「菜單」頁新增一個吧</div>`;
+
+  const recentHtml = recent.map(r => `
+    <div class="card p-3 mb-2" onclick="App.openHistoryDetail('${r.id}')">
+      <div class="flex justify-between items-center">
+        <div class="font-bold text-sm">${escapeHtml(r.templateNameSnapshot || '空白訓練')}</div>
+        <div class="text-xs" style="color:var(--text2)">${fmtDateShort(r.startTime)}</div>
+      </div>
+      <div class="text-xs mt-1" style="color:var(--text2)">${r.exercises.length} 個動作 · ${fmtDuration(r.duration)}</div>
+    </div>
+  `).join('') || `<div class="text-sm text-center py-4" style="color:var(--text2)">還沒有任何訓練紀錄</div>`;
+
+  return pageWrap('首頁', '', `
+    <div class="card p-4 mb-4" style="background:linear-gradient(135deg,var(--primary),#8b5cf6); color:#fff; border:none;">
+      <div class="text-sm opacity-90 mb-1">今日狀態</div>
+      <div class="text-lg font-bold mb-3">${escapeHtml(quote)}</div>
+      <div class="flex gap-4 text-sm">
+        <div><div class="text-2xl font-extrabold">${monthCount}</div><div class="opacity-80 text-xs">本月訓練次數</div></div>
+        <div><div class="text-2xl font-extrabold">${streak}</div><div class="opacity-80 text-xs">連續訓練天數</div></div>
+      </div>
+    </div>
+
+    <button onclick="App.startBlank()" class="btn btn-primary w-full mb-4 py-3 text-base">🏋️ 開始空白訓練</button>
+
+    <div class="font-bold mb-2 text-sm" style="color:var(--text2)">快速開始菜單</div>
+    ${templateQuick}
+
+    <div class="font-bold mb-2 mt-4 text-sm" style="color:var(--text2)">最近訓練</div>
+    ${recentHtml}
+  `);
+}
+
+/* ============================== EXERCISES TAB ============================== */
+function renderExercisesTab(){
+  const v = State.exercisesView;
+  if (v.subview === 'form') return renderExerciseForm(v.editId);
+  if (v.subview === 'detail') return renderExerciseDetail(v.editId);
+
+  const cats = ['全部', ...CATEGORIES];
+  const catChips = cats.map(c => `<button class="chip ${v.category===c?'active':''}" onclick="App.setExerciseFilter('category','${c}')">${c}</button>`).join('');
+
+  let list = State.exercises.filter(e => v.category==='全部' || e.category===v.category);
+  if (v.search){
+    const q = v.search.toLowerCase();
+    list = list.filter(e => e.name.toLowerCase().includes(q));
+  }
+
+  const items = list.map(e => `
+    <div class="card p-3 mb-2 flex gap-3 items-center" onclick="App.openExerciseDetail('${e.id}')">
+      <div class="w-14 h-14 rounded-xl overflow-hidden placeholder-img shrink-0">
+        ${e.imageUrl ? `<img src="${escapeHtml(e.imageUrl)}" onerror="this.remove()" class="w-full h-full object-cover">` : ''}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="font-bold text-sm truncate">${escapeHtml(e.name)} ${e.isCustom?'<span class="chip ml-1" style="padding:2px 6px;">自訂</span>':''}</div>
+        <div class="text-xs mt-0.5 truncate" style="color:var(--text2)">${e.category} · ${e.equipment}</div>
+      </div>
+    </div>
+  `).join('') || `<div class="text-sm text-center py-8" style="color:var(--text2)">找不到符合的動作</div>`;
+
+  return pageWrap('動作庫', `<button class="btn btn-primary" style="padding:8px 14px;" onclick="App.openExerciseForm(null)">+ 新增</button>`, `
+    <input class="input mb-3" placeholder="搜尋動作名稱" value="${escapeHtml(v.search)}" oninput="App.setExerciseFilter('search', this.value)">
+    <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3 pb-1">${catChips}</div>
+    ${items}
+  `);
+}
+App.setExerciseFilter = function(key, val){
+  State.exercisesView[key] = val;
+  if (key === 'search'){
+    const el = document.activeElement;
+    App.render();
+    const input = document.querySelector('#app input[placeholder="搜尋動作名稱"]');
+    if (input){ input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
+  } else {
+    App.render();
+  }
+};
+App.openExerciseForm = function(id){
+  State.exercisesView.subview = 'form';
+  State.exercisesView.editId = id;
+  App.render();
+};
+App.openExerciseDetail = function(id){
+  State.exercisesView.subview = 'detail';
+  State.exercisesView.editId = id;
+  App.render();
+};
+App.backToExerciseList = function(){
+  State.exercisesView.subview = 'list';
+  State.exercisesView.editId = null;
+  App.render();
+};
+
+function renderExerciseDetail(id){
+  const e = exerciseById(id);
+  if (!e) { App.backToExerciseList(); return ''; }
+  return pageWrap('動作詳情', `<button class="btn-ghost text-sm" onclick="App.backToExerciseList()">返回</button>`, `
+    <div class="w-full h-48 rounded-2xl overflow-hidden placeholder-img mb-4">
+      ${e.imageUrl ? `<img src="${escapeHtml(e.imageUrl)}" onerror="this.remove()" class="w-full h-full object-cover">` : ''}
+    </div>
+    <h2 class="text-lg font-extrabold mb-1">${escapeHtml(e.name)} ${e.isCustom?'<span class="chip" style="padding:2px 6px;">自訂</span>':''}</h2>
+    <div class="text-sm mb-3" style="color:var(--text2)">${e.category} · ${e.equipment}${e.supportsUnilateral?' · 支援單手/雙手':''}</div>
+    <div class="flex flex-wrap gap-2 mb-3">${e.muscleGroups.map(m=>`<span class="chip">${escapeHtml(m)}</span>`).join('')}</div>
+    ${e.description ? `<div class="card p-3 text-sm mb-4">${escapeHtml(e.description)}</div>` : ''}
+    ${e.isCustom ? `
+      <div class="flex gap-2">
+        <button class="btn btn-secondary flex-1" onclick="App.openExerciseForm('${e.id}')">編輯</button>
+        <button class="btn btn-danger flex-1" onclick="App.deleteExercise('${e.id}')">刪除</button>
+      </div>
+    ` : ''}
+  `);
+}
+
+function renderExerciseForm(id){
+  const editing = id ? exerciseById(id) : null;
+  const e = editing || { name:'', category:CATEGORIES[0], equipment:EQUIPMENT[0], muscleGroups:[], imageUrl:'', description:'', supportsUnilateral:false, trackingType:'weight_reps' };
+  return pageWrap(editing ? '編輯動作' : '新增自訂動作', `<button class="btn-ghost text-sm" onclick="App.backToExerciseList()">取消</button>`, `
+    <div class="space-y-3">
+      <div><label class="text-xs" style="color:var(--text2)">動作名稱</label><input id="exName" class="input mt-1" value="${escapeHtml(e.name)}"></div>
+      <div><label class="text-xs" style="color:var(--text2)">分類</label>
+        <select id="exCategory" class="input mt-1">${CATEGORIES.map(c=>`<option ${e.category===c?'selected':''}>${c}</option>`).join('')}</select>
+      </div>
+      <div><label class="text-xs" style="color:var(--text2)">設備</label>
+        <select id="exEquipment" class="input mt-1">${EQUIPMENT.map(c=>`<option ${e.equipment===c?'selected':''}>${c}</option>`).join('')}</select>
+      </div>
+      <div><label class="text-xs" style="color:var(--text2)">主要肌群（用逗號分隔）</label>
+        <input id="exMuscles" class="input mt-1" value="${escapeHtml(e.muscleGroups.join('、'))}" placeholder="例如：胸大肌、三頭肌">
+      </div>
+      <div><label class="text-xs" style="color:var(--text2)">記錄方式</label>
+        <select id="exTracking" class="input mt-1">
+          <option value="weight_reps" ${e.trackingType==='weight_reps'?'selected':''}>重量 × 次數</option>
+          <option value="distance_reps" ${e.trackingType==='distance_reps'?'selected':''}>距離 × 時間（有氧）</option>
+        </select>
+      </div>
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="exUni" ${e.supportsUnilateral?'checked':''}> 支援單手/雙手變化</label>
+      <div><label class="text-xs" style="color:var(--text2)">圖片網址（選填）</label><input id="exImage" class="input mt-1" value="${escapeHtml(e.imageUrl)}" placeholder="https://..."></div>
+      <div><label class="text-xs" style="color:var(--text2)">說明（選填）</label><textarea id="exDesc" class="input mt-1" rows="3">${escapeHtml(e.description)}</textarea></div>
+      <button class="btn btn-primary w-full mt-2" onclick="App.saveExercise(${editing ? `'${editing.id}'` : 'null'})">儲存動作</button>
+    </div>
+  `);
+}
+App.saveExercise = async function(id){
+  const name = document.getElementById('exName').value.trim();
+  if (!name){ App.toast('請輸入動作名稱'); return; }
+  const muscleGroups = document.getElementById('exMuscles').value.split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
+  const obj = {
+    id: id || uid(),
+    name,
+    category: document.getElementById('exCategory').value,
+    equipment: document.getElementById('exEquipment').value,
+    muscleGroups,
+    imageUrl: document.getElementById('exImage').value.trim(),
+    description: document.getElementById('exDesc').value.trim(),
+    isCustom: true,
+    supportsUnilateral: document.getElementById('exUni').checked,
+    trackingType: document.getElementById('exTracking').value,
+  };
+  await dbPut('exercises', obj);
+  await App.reloadAll();
+  App.toast('已儲存動作');
+  App.backToExerciseList();
+};
+App.deleteExercise = async function(id){
+  const ok = await App.showConfirm('確定要刪除這個自訂動作嗎？已使用過的歷史紀錄不受影響。', '刪除動作', '刪除', '取消');
+  if (!ok) return;
+  await dbDelete('exercises', id);
+  await App.reloadAll();
+  App.backToExerciseList();
+};
+
+/* ============================== EXERCISE PICKER (共用) ============================== */
+App.openExercisePicker = function(onPick){
+  State.pendingExercisePicker = onPick;
+  const list = State.exercises;
+  const grouped = CATEGORIES.map(cat => {
+    const items = list.filter(e=>e.category===cat);
+    if (!items.length) return '';
+    return `<div class="text-xs font-bold mt-3 mb-1" style="color:var(--text2)">${cat}</div>` + items.map(e => `
+      <div class="card p-3 mb-2" onclick="App.pickExercise('${e.id}')">
+        <div class="font-bold text-sm">${escapeHtml(e.name)}</div>
+        <div class="text-xs" style="color:var(--text2)">${e.equipment}</div>
+      </div>
+    `).join('');
+  }).join('');
+  App.showModalHtml(`
+    <div class="flex justify-between items-center mb-3">
+      <div class="font-bold text-base">選擇動作</div>
+      <button class="btn-ghost text-sm" onclick="App.closeModal()">關閉</button>
+    </div>
+    <input class="input mb-2" placeholder="搜尋動作" oninput="App.filterPicker(this.value)">
+    <div id="pickerList">${grouped}</div>
+  `);
+};
+App.filterPicker = function(q){
+  q = q.toLowerCase();
+  const list = State.exercises.filter(e => e.name.toLowerCase().includes(q));
+  document.getElementById('pickerList').innerHTML = list.map(e => `
+    <div class="card p-3 mb-2" onclick="App.pickExercise('${e.id}')">
+      <div class="font-bold text-sm">${escapeHtml(e.name)}</div>
+      <div class="text-xs" style="color:var(--text2)">${e.category} · ${e.equipment}</div>
+    </div>
+  `).join('') || `<div class="text-sm text-center py-6" style="color:var(--text2)">找不到動作</div>`;
+};
+App.pickExercise = function(id){
+  const cb = State.pendingExercisePicker;
+  App.closeModal();
+  if (cb) cb(id);
+};
+
+/* ============================== TEMPLATES TAB (菜單) ============================== */
+function blankTemplateDraft(){
+  return { id: null, name:'', createdAt: nowISO(), updatedAt: nowISO(), exercises: [] };
+}
+function emptySet(setNumber){ return { setNumber, weight: undefined, distance: undefined, reps: 0 }; }
+
+function renderTemplatesTab(){
+  const v = State.templatesView;
+  if (v.subview === 'form') return renderTemplateForm();
+
+  const items = State.templates.map(t => `
+    <div class="card p-3 mb-2">
+      <div class="flex justify-between items-start">
+        <div onclick="App.viewTemplateOptions('${t.id}')" class="flex-1">
+          <div class="font-bold text-sm">${escapeHtml(t.name)}</div>
+          <div class="text-xs mt-0.5" style="color:var(--text2)">${t.exercises.length} 個動作 · 更新於 ${fmtDate(t.updatedAt)}</div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-2">
+        <button class="btn btn-primary flex-1" style="padding:6px;" onclick="App.startFromTemplate('${t.id}')">開始訓練</button>
+        <button class="btn btn-secondary" style="padding:6px 10px;" onclick="App.editTemplate('${t.id}')">編輯</button>
+        <button class="btn btn-secondary" style="padding:6px 10px;" onclick="App.deleteTemplate('${t.id}')">刪除</button>
+      </div>
+    </div>
+  `).join('') || `<div class="text-sm text-center py-8" style="color:var(--text2)">尚未建立菜單，點右上角新增一個吧</div>`;
+
+  return pageWrap('菜單', `<button class="btn btn-primary" style="padding:8px 14px;" onclick="App.newTemplate()">+ 新增</button>`, items);
+}
+App.newTemplate = function(){
+  State.templatesView.draft = blankTemplateDraft();
+  State.templatesView.subview = 'form';
+  App.render();
+};
+App.editTemplate = function(id){
+  const t = templateById(id);
+  State.templatesView.draft = JSON.parse(JSON.stringify(t));
+  State.templatesView.subview = 'form';
+  App.render();
+};
+App.deleteTemplate = async function(id){
+  const ok = await App.showConfirm('確定要刪除這份菜單嗎？過去使用它的訓練紀錄不會受影響。', '刪除菜單', '刪除', '取消');
+  if (!ok) return;
+  await dbDelete('templates', id);
+  await App.reloadAll();
+  App.render();
+};
+App.backToTemplateList = function(){
+  State.templatesView.subview = 'list';
+  State.templatesView.draft = null;
+  App.render();
+};
+
+function renderTemplateForm(){
+  const d = State.templatesView.draft;
+  const exHtml = d.exercises.map((te, idx) => {
+    const ex = exerciseById(te.exerciseId);
+    if (!ex) return '';
+    const isDistance = ex.trackingType === 'distance_reps';
+    const setsHtml = te.plannedSets.map((s, si) => `
+      <div class="flex items-center gap-2 mb-1 set-row">
+        <span class="w-5 text-xs text-center" style="color:var(--text2)">${s.setNumber}</span>
+        ${isDistance
+          ? `<input class="input" type="number" step="0.01" placeholder="${distanceLabel()}" value="${s.distance!==undefined?toDisplayDistance(s.distance):''}" oninput="App.tplUpdateSet(${idx},${si},'distance',this.value)">`
+          : `<input class="input" type="number" step="0.5" placeholder="${weightLabel()}" value="${s.weight!==undefined?toDisplayWeight(s.weight):''}" oninput="App.tplUpdateSet(${idx},${si},'weight',this.value)">`
+        }
+        <input class="input" type="number" placeholder="${isDistance?'時間(分)':'次數'}" value="${s.reps||''}" oninput="App.tplUpdateSet(${idx},${si},'reps',this.value)">
+        <button class="text-xs px-2" style="color:var(--danger)" onclick="App.tplRemoveSet(${idx},${si})">✕</button>
+      </div>
+    `).join('');
+    return `
+      <div class="card p-3 mb-3">
+        <div class="flex justify-between items-center mb-2">
+          <div class="font-bold text-sm">${escapeHtml(ex.name)}</div>
+          <button class="text-xs" style="color:var(--danger)" onclick="App.tplRemoveExercise(${idx})">移除</button>
+        </div>
+        ${ex.supportsUnilateral ? `
+          <select class="input mb-2" onchange="App.tplUpdateVariant(${idx}, this.value)">
+            <option value="">未指定</option>
+            <option value="雙手" ${te.variant==='雙手'?'selected':''}>雙手</option>
+            <option value="單手" ${te.variant==='單手'?'selected':''}>單手</option>
+          </select>` : ''}
+        ${setsHtml}
+        <button class="btn btn-secondary w-full mt-1" style="padding:6px;" onclick="App.tplAddSet(${idx})">+ 加一組</button>
+        <textarea class="input mt-2" placeholder="動作備註" oninput="App.tplUpdateNotes(${idx}, this.value)">${escapeHtml(te.notes||'')}</textarea>
+      </div>
+    `;
+  }).join('');
+
+  return pageWrap(d.id ? '編輯菜單' : '新增菜單', `<button class="btn-ghost text-sm" onclick="App.backToTemplateList()">取消</button>`, `
+    <input id="tplName" class="input mb-4" placeholder="菜單名稱，例如：胸 史密斯" value="${escapeHtml(d.name)}" oninput="App.tplUpdateName(this.value)">
+    ${exHtml}
+    <button class="btn btn-secondary w-full mb-4" onclick="App.tplAddExercise()">+ 加入動作</button>
+    <button class="btn btn-primary w-full" onclick="App.saveTemplate()">儲存菜單</button>
+  `);
+}
+App.tplUpdateName = function(val){ State.templatesView.draft.name = val; };
+App.tplAddExercise = function(){
+  App.openExercisePicker((exId) => {
+    const ex = exerciseById(exId);
+    State.templatesView.draft.exercises.push({
+      exerciseId: exId, order: State.templatesView.draft.exercises.length,
+      variant: ex.supportsUnilateral ? '雙手' : undefined,
+      plannedSets: [emptySet(1)], notes: ''
+    });
+    App.render();
+  });
+};
+App.tplRemoveExercise = function(idx){
+  State.templatesView.draft.exercises.splice(idx,1);
+  State.templatesView.draft.exercises.forEach((e,i)=>e.order=i);
+  App.render();
+};
+App.tplAddSet = function(idx){
+  const sets = State.templatesView.draft.exercises[idx].plannedSets;
+  sets.push(emptySet(sets.length+1));
+  App.render();
+};
+App.tplRemoveSet = function(idx, si){
+  const sets = State.templatesView.draft.exercises[idx].plannedSets;
+  sets.splice(si,1);
+  sets.forEach((s,i)=>s.setNumber=i+1);
+  App.render();
+};
+App.tplUpdateSet = function(idx, si, field, val){
+  const s = State.templatesView.draft.exercises[idx].plannedSets[si];
+  if (field==='weight') s.weight = toStoreWeight(val);
+  else if (field==='distance') s.distance = toStoreDistance(val);
+  else s.reps = parseInt(val)||0;
+};
+App.tplUpdateVariant = function(idx, val){ State.templatesView.draft.exercises[idx].variant = val || undefined; };
+App.tplUpdateNotes = function(idx, val){ State.templatesView.draft.exercises[idx].notes = val; };
+App.saveTemplate = async function(){
+  const d = State.templatesView.draft;
+  const name = (d.name || '').trim();
+  if (!name){ App.toast('請輸入菜單名稱'); return; }
+  if (!d.exercises.length){ App.toast('請至少加入一個動作'); return; }
+  d.name = name;
+  d.id = d.id || uid();
+  d.updatedAt = nowISO();
+  await dbPut('templates', d);
+  await App.reloadAll();
+  App.toast('已儲存菜單');
+  App.backToTemplateList();
+};
+App.viewTemplateOptions = function(id){ App.editTemplate(id); };
+
+/* ============================== 訓練 SESSION ============================== */
+function snapshotSetsFromTemplateExercise(te){
+  return te.plannedSets.map(s => ({ setNumber:s.setNumber, weight:s.weight, distance:s.distance, reps:s.reps, completed:false }));
+}
+App.startFromTemplate = function(templateId){
+  const t = templateById(templateId);
+  const session = {
+    templateId: t.id,
+    templateNameSnapshot: t.name,
+    startTime: nowISO(),
+    tags: [],
+    overallNotes: '',
+    exercises: t.exercises.map(te => ({
+      exerciseId: te.exerciseId,
+      exerciseNameSnapshot: exerciseById(te.exerciseId)?.name || '未知動作',
+      order: te.order,
+      variant: te.variant,
+      notes: te.notes || '',
+      sets: snapshotSetsFromTemplateExercise(te),
+      trackingType: exerciseById(te.exerciseId)?.trackingType || 'weight_reps',
+    })),
+    originalTemplateSnapshot: JSON.parse(JSON.stringify(t)),
+  };
+  State.session = session;
+  saveDraft(session);
+  App.startSessionTimer();
+  App.render();
+};
+App.startBlank = function(){
+  State.session = {
+    templateId: null, templateNameSnapshot: null, startTime: nowISO(),
+    tags: [], overallNotes: '', exercises: [], originalTemplateSnapshot: null
+  };
+  saveDraft(State.session);
+  App.startSessionTimer();
+  App.render();
+};
+App.startSessionTimer = function(){
+  if (State.sessionTimerHandle) clearInterval(State.sessionTimerHandle);
+  State.sessionTimerHandle = setInterval(attachSessionTimerDisplay, 1000);
+};
+function attachSessionTimerDisplay(){
+  const el = document.getElementById('sessionTimer');
+  if (!el || !State.session) return;
+  const elapsedMs = Date.now() - new Date(State.session.startTime).getTime();
+  const mins = Math.floor(elapsedMs/60000), secs = Math.floor((elapsedMs%60000)/1000);
+  el.textContent = `${pad2(mins)}:${pad2(secs)}`;
+}
+const persistDraft = debounce(()=>{ if (State.session) saveDraft(State.session); }, 400);
+
+function lastRecordForExercise(exerciseId){
+  const recs = State.records.filter(r => r.exercises.some(e=>e.exerciseId===exerciseId));
+  if (!recs.length) return null;
+  return recs[0].exercises.find(e=>e.exerciseId===exerciseId);
+}
+
+function renderSession(){
+  const s = State.session;
+  const tagChips = State.tags.map(t => `<button class="chip ${s.tags.includes(t.name)?'active':''}" onclick="App.toggleSessionTag('${escapeHtml(t.name)}')">${escapeHtml(t.name)}</button>`).join('');
+
+  const exHtml = s.exercises.map((se, idx) => {
+    const ex = exerciseById(se.exerciseId);
+    const isDistance = se.trackingType === 'distance_reps';
+    const prev = lastRecordForExercise(se.exerciseId);
+    const setsHtml = se.sets.map((st, si) => {
+      const prevSet = prev && prev.sets[si];
+      const prevLabel = prevSet ? (isDistance ? `${toDisplayDistance(prevSet.distance)||'-'}${distanceLabel()} / ${prevSet.reps||'-'}分` : `${toDisplayWeight(prevSet.weight)||'-'}${weightLabel()} x ${prevSet.reps||'-'}`) : '-';
+      return `
+      <div class="flex items-center gap-2 mb-1.5 set-row">
+        <span class="w-5 text-xs text-center" style="color:var(--text2)">${st.setNumber}</span>
+        <span class="text-2xs w-20 shrink-0 truncate" style="color:var(--text2)" title="上次紀錄">${prevLabel}</span>
+        ${isDistance
+          ? `<input class="input" type="number" step="0.01" placeholder="${distanceLabel()}" value="${st.distance!==undefined?toDisplayDistance(st.distance):''}" oninput="App.sessUpdateSet(${idx},${si},'distance',this.value)">`
+          : `<input class="input" type="number" step="0.5" placeholder="${weightLabel()}" value="${st.weight!==undefined?toDisplayWeight(st.weight):''}" oninput="App.sessUpdateSet(${idx},${si},'weight',this.value)">`
+        }
+        <input class="input" type="number" placeholder="${isDistance?'時間(分)':'次數'}" value="${st.reps||''}" oninput="App.sessUpdateSet(${idx},${si},'reps',this.value)">
+        <button onclick="App.sessToggleComplete(${idx},${si})" class="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center" style="background:${st.completed?'var(--primary)':'var(--input-bg)'}; border:1px solid var(--border); color:${st.completed?'#fff':'var(--text2)'}">✓</button>
+      </div>`;
+    }).join('');
+    return `
+      <div class="card p-3 mb-3">
+        <div class="flex justify-between items-center mb-2">
+          <div class="font-bold text-sm">${escapeHtml(se.exerciseNameSnapshot)}</div>
+          <button class="text-xs" style="color:var(--danger)" onclick="App.sessRemoveExercise(${idx})">移除</button>
+        </div>
+        ${ex && ex.supportsUnilateral ? `
+          <select class="input mb-2" onchange="App.sessUpdateVariant(${idx}, this.value)">
+            <option value="">未指定</option>
+            <option value="雙手" ${se.variant==='雙手'?'selected':''}>雙手</option>
+            <option value="單手" ${se.variant==='單手'?'selected':''}>單手</option>
+          </select>` : ''}
+        ${setsHtml}
+        <button class="btn btn-secondary w-full mt-1" style="padding:6px;" onclick="App.sessAddSet(${idx})">+ 加一組</button>
+        <input class="input mt-2" placeholder="動作備註" value="${escapeHtml(se.notes||'')}" oninput="App.sessUpdateNotes(${idx}, this.value)">
+      </div>
+    `;
+  }).join('') || `<div class="text-sm text-center py-6" style="color:var(--text2)">尚未加入任何動作</div>`;
+
+  return `
+    <div class="px-4 pt-safe pb-3 sticky top-0 z-10" style="background:var(--bg);">
+      <div class="flex justify-between items-center mb-2">
+        <button class="btn-ghost text-sm" onclick="App.cancelSession()">取消訓練</button>
+        <div id="sessionTimer" class="text-lg font-mono font-bold">00:00</div>
+        <button class="btn btn-primary" style="padding:6px 14px;" onclick="App.finishSession()">完成</button>
+      </div>
+      <h1 class="text-xl font-extrabold">${escapeHtml(s.templateNameSnapshot || '空白訓練')}</h1>
+    </div>
+    <div class="px-4 pb-24">
+      <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3">${tagChips}</div>
+      <textarea class="input mb-4" placeholder="整體訓練備註" oninput="App.sessUpdateOverallNotes(this.value)">${escapeHtml(s.overallNotes||'')}</textarea>
+      ${exHtml}
+      <button class="btn btn-secondary w-full" onclick="App.sessAddExercise()">+ 加入動作</button>
+    </div>
+  `;
+}
+App.toggleSessionTag = function(name){
+  const s = State.session;
+  const i = s.tags.indexOf(name);
+  if (i>=0) s.tags.splice(i,1); else s.tags.push(name);
+  persistDraft(); App.render();
+};
+App.sessAddExercise = function(){
+  App.openExercisePicker((exId) => {
+    const ex = exerciseById(exId);
+    State.session.exercises.push({
+      exerciseId: exId, exerciseNameSnapshot: ex.name, order: State.session.exercises.length,
+      variant: ex.supportsUnilateral ? '雙手' : undefined, notes:'',
+      sets: [{ setNumber:1, weight:undefined, distance:undefined, reps:0, completed:false }],
+      trackingType: ex.trackingType,
+    });
+    persistDraft(); App.render();
+  });
+};
+App.sessRemoveExercise = function(idx){
+  State.session.exercises.splice(idx,1);
+  State.session.exercises.forEach((e,i)=>e.order=i);
+  persistDraft(); App.render();
+};
+App.sessAddSet = function(idx){
+  const sets = State.session.exercises[idx].sets;
+  const last = sets[sets.length-1];
+  sets.push({ setNumber: sets.length+1, weight: last?.weight, distance: last?.distance, reps: last?.reps||0, completed:false });
+  persistDraft(); App.render();
+};
+App.sessUpdateSet = function(idx, si, field, val){
+  const s = State.session.exercises[idx].sets[si];
+  if (field==='weight') s.weight = toStoreWeight(val);
+  else if (field==='distance') s.distance = toStoreDistance(val);
+  else s.reps = parseInt(val)||0;
+  persistDraft();
+};
+App.sessToggleComplete = function(idx, si){
+  const s = State.session.exercises[idx].sets[si];
+  s.completed = !s.completed;
+  persistDraft(); App.render();
+};
+App.sessUpdateVariant = function(idx, val){ State.session.exercises[idx].variant = val || undefined; persistDraft(); };
+App.sessUpdateNotes = function(idx, val){ State.session.exercises[idx].notes = val; persistDraft(); };
+App.sessUpdateOverallNotes = function(val){ State.session.overallNotes = val; persistDraft(); };
+
+App.cancelSession = async function(){
+  const ok = await App.showConfirm('確定要放棄這次訓練嗎？目前記錄的內容將不會被保存。', '取消訓練', '放棄', '繼續訓練');
+  if (!ok) return;
+  clearInterval(State.sessionTimerHandle);
+  State.session = null;
+  clearDraft();
+  App.render();
+};
+
+function templateDiffersFromSession(template, session){
+  if (session.exercises.length !== template.exercises.length) return true;
+  for (let i=0;i<session.exercises.length;i++){
+    const se = session.exercises[i], te = template.exercises[i];
+    if (!te || se.exerciseId !== te.exerciseId) return true;
+    if (se.variant !== te.variant) return true;
+    if (se.sets.length !== te.plannedSets.length) return true;
+    for (let j=0;j<se.sets.length;j++){
+      const ss = se.sets[j], ts = te.plannedSets[j];
+      if (!ts) return true;
+      if ((ss.weight||0) !== (ts.weight||0)) return true;
+      if ((ss.distance||0) !== (ts.distance||0)) return true;
+      if ((ss.reps||0) !== (ts.reps||0)) return true;
+    }
+  }
+  return false;
+}
+
+App.finishSession = async function(){
+  const s = State.session;
+  if (!s.exercises.length){
+    App.toast('請至少加入一個動作再完成訓練');
+    return;
+  }
+  const endTime = nowISO();
+  const duration = Math.max(1, Math.round((new Date(endTime)-new Date(s.startTime))/60000));
+
+  let savedAsTemplateUpdate = false;
+  if (s.templateId){
+    const currentTemplate = templateById(s.templateId);
+    if (currentTemplate && templateDiffersFromSession(currentTemplate, s)){
+      const ok = await App.showConfirm('這次訓練的內容和原本的菜單不同，是否要更新這份菜單？', '更新菜單', '更新', '不更新');
+      if (ok){
+        currentTemplate.exercises = s.exercises.map(se => ({
+          exerciseId: se.exerciseId, order: se.order, variant: se.variant,
+          plannedSets: se.sets.map(st => ({ setNumber:st.setNumber, weight:st.weight, distance:st.distance, reps:st.reps })),
+          notes: se.notes
+        }));
+        currentTemplate.updatedAt = nowISO();
+        await dbPut('templates', currentTemplate);
+        savedAsTemplateUpdate = true;
+      }
+    }
+  }
+
+  const record = {
+    id: uid(), date: dateKey(s.startTime), startTime: s.startTime, endTime, duration,
+    templateId: s.templateId || undefined, templateNameSnapshot: s.templateNameSnapshot || undefined,
+    tags: s.tags, exercises: s.exercises.map(se => ({
+      exerciseId: se.exerciseId, exerciseNameSnapshot: se.exerciseNameSnapshot, order: se.order,
+      variant: se.variant, sets: se.sets, notes: se.notes
+    })),
+    overallNotes: s.overallNotes, savedAsTemplateUpdate
+  };
+  await dbPut('records', record);
+
+  for (const tagName of s.tags){
+    if (!State.tags.some(t=>t.name===tagName)){
+      await dbPut('tags', { id: uid(), name: tagName, createdAt: nowISO() });
+    }
+  }
+
+  await App.reloadAll();
+  clearInterval(State.sessionTimerHandle);
+  State.session = null;
+  clearDraft();
+  App.render();
+
+  if (!record.templateId){
+    const saveAsTpl = await App.showConfirm('是否要把這次的訓練內容存成新的菜單，方便下次使用？', '儲存為菜單', '儲存', '不用了');
+    if (saveAsTpl){
+      App.promptSaveAsTemplate(record);
+      return;
+    }
+  }
+  App.toast(pickMotivation(), 3200);
+};
+
+App.promptSaveAsTemplate = function(record){
+  App.showModalHtml(`
+    <div class="font-bold text-base mb-3">儲存為新菜單</div>
+    <input id="newTplName" class="input mb-4" placeholder="菜單名稱">
+    <button class="btn btn-primary w-full" onclick="App.confirmSaveAsTemplate('${record.id}')">儲存</button>
+  `);
+};
+App.confirmSaveAsTemplate = async function(recordId){
+  const name = document.getElementById('newTplName').value.trim();
+  if (!name){ App.toast('請輸入名稱'); return; }
+  const record = State.records.find(r=>r.id===recordId);
+  const tpl = {
+    id: uid(), name, createdAt: nowISO(), updatedAt: nowISO(),
+    exercises: record.exercises.map(se => ({
+      exerciseId: se.exerciseId, order: se.order, variant: se.variant,
+      plannedSets: se.sets.map(st => ({ setNumber:st.setNumber, weight:st.weight, distance:st.distance, reps:st.reps })),
+      notes: se.notes
+    }))
+  };
+  await dbPut('templates', tpl);
+  await App.reloadAll();
+  App.closeModal();
+  App.toast(pickMotivation(), 3200);
+};
+
+/* ============================== HISTORY TAB (紀錄) ============================== */
+function renderHistoryTab(){
+  const v = State.historyView;
+  if (v.subview === 'detail') return renderHistoryDetail(v.openId);
+
+  if (!State.records.length){
+    return pageWrap('訓練紀錄', '', `<div class="text-sm text-center py-8" style="color:var(--text2)">還沒有任何訓練紀錄</div>`);
+  }
+  const groups = {};
+  State.records.forEach(r => {
+    const mk = monthKey(r.startTime);
+    (groups[mk] = groups[mk] || []).push(r);
+  });
+  const html = Object.keys(groups).sort().reverse().map(mk => {
+    const [y,m] = mk.split('-');
+    const items = groups[mk].map(r => {
+      const totalVolume = r.exercises.reduce((sum,e)=>sum + e.sets.reduce((s2,st)=> s2 + (st.completed && st.weight ? st.weight*st.reps : 0),0),0);
+      return `
+      <div class="card p-3 mb-2" onclick="App.openHistoryDetail('${r.id}')">
+        <div class="flex justify-between items-center">
+          <div class="font-bold text-sm">${escapeHtml(r.templateNameSnapshot || '空白訓練')}</div>
+          <div class="text-xs" style="color:var(--text2)">${fmtDateShort(r.startTime)}</div>
+        </div>
+        <div class="text-xs mt-1" style="color:var(--text2)">${r.exercises.length} 個動作 · ${fmtDuration(r.duration)}${totalVolume>0?` · 訓練量 ${Math.round(toDisplayWeight(totalVolume))}${weightLabel()}`:''}</div>
+        ${r.tags.length ? `<div class="flex gap-1 mt-1.5 flex-wrap">${r.tags.map(t=>`<span class="chip" style="padding:2px 8px;">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="text-xs font-bold mt-3 mb-1" style="color:var(--text2)">${y}年${parseInt(m)}月</div>${items}`;
+  }).join('');
+
+  return pageWrap('訓練紀錄', '', html);
+}
+App.openHistoryDetail = function(id){
+  State.historyView.subview = 'detail';
+  State.historyView.openId = id;
+  State.tab = 'history';
+  App.render();
+};
+App.backToHistoryList = function(){
+  State.historyView.subview = 'list';
+  State.historyView.openId = null;
+  App.render();
+};
+function renderHistoryDetail(id){
+  const r = State.records.find(x=>x.id===id);
+  if (!r){ App.backToHistoryList(); return ''; }
+  const exHtml = r.exercises.map((se, idx) => {
+    const isDistance = exerciseById(se.exerciseId)?.trackingType === 'distance_reps' || se.sets.some(s=>s.distance!==undefined);
+    const setsHtml = se.sets.map((st, si) => `
+      <div class="flex items-center gap-2 mb-1 text-sm">
+        <span class="w-5 text-xs text-center" style="color:var(--text2)">${st.setNumber}</span>
+        ${isDistance
+          ? `<input class="input" type="number" step="0.01" value="${st.distance!==undefined?toDisplayDistance(st.distance):''}" oninput="App.histUpdateSet(${idx},${si},'distance',this.value)">`
+          : `<input class="input" type="number" step="0.5" value="${st.weight!==undefined?toDisplayWeight(st.weight):''}" oninput="App.histUpdateSet(${idx},${si},'weight',this.value)">`
+        }
+        <input class="input" type="number" value="${st.reps||''}" oninput="App.histUpdateSet(${idx},${si},'reps',this.value)">
+        <button onclick="App.histToggleComplete(${idx},${si})" class="w-8 h-8 rounded-lg shrink-0" style="background:${st.completed?'var(--primary)':'var(--input-bg)'}; border:1px solid var(--border); color:${st.completed?'#fff':'var(--text2)'}">✓</button>
+      </div>
+    `).join('');
+    return `<div class="card p-3 mb-3">
+      <div class="font-bold text-sm mb-2">${escapeHtml(se.exerciseNameSnapshot)}${se.variant?` · ${se.variant}`:''}</div>
+      ${setsHtml}
+      ${se.notes ? `<div class="text-xs mt-2" style="color:var(--text2)">備註：${escapeHtml(se.notes)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  return pageWrap('訓練詳情', `<button class="btn-ghost text-sm" onclick="App.backToHistoryList()">返回</button>`, `
+    <div class="card p-3 mb-4">
+      <div class="font-bold">${escapeHtml(r.templateNameSnapshot || '空白訓練')}</div>
+      <div class="text-xs mt-1" style="color:var(--text2)">${fmtDate(r.startTime)} ${fmtTime(r.startTime)} - ${fmtTime(r.endTime)} · ${fmtDuration(r.duration)}</div>
+      ${r.tags.length ? `<div class="flex gap-1 mt-2 flex-wrap">${r.tags.map(t=>`<span class="chip">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      ${r.overallNotes ? `<div class="text-sm mt-2">${escapeHtml(r.overallNotes)}</div>` : ''}
+    </div>
+    ${exHtml}
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-danger flex-1" onclick="App.deleteRecord('${r.id}')">刪除這筆紀錄</button>
+    </div>
+  `);
+}
+App.histUpdateSet = function(idx, si, field, val){
+  const r = State.records.find(x=>x.id===State.historyView.openId);
+  const s = r.exercises[idx].sets[si];
+  if (field==='weight') s.weight = toStoreWeight(val);
+  else if (field==='distance') s.distance = toStoreDistance(val);
+  else s.reps = parseInt(val)||0;
+  dbPut('records', r);
+};
+App.histToggleComplete = function(idx, si){
+  const r = State.records.find(x=>x.id===State.historyView.openId);
+  r.exercises[idx].sets[si].completed = !r.exercises[idx].sets[si].completed;
+  dbPut('records', r);
+  App.render();
+};
+App.deleteRecord = async function(id){
+  const ok = await App.showConfirm('確定要刪除這筆訓練紀錄嗎？此動作無法復原。', '刪除紀錄', '刪除', '取消');
+  if (!ok) return;
+  await dbDelete('records', id);
+  await App.reloadAll();
+  App.backToHistoryList();
+};
+
+/* ============================== STATS TAB (統計) ============================== */
+let chartInstances = {};
+function destroyCharts(){ Object.values(chartInstances).forEach(c=>c && c.destroy()); chartInstances = {}; }
+
+function rangeStartDate(range){
+  const now = new Date();
+  if (range==='7d'){ const d=new Date(now); d.setDate(d.getDate()-7); return d; }
+  if (range==='30d'){ const d=new Date(now); d.setDate(d.getDate()-30); return d; }
+  if (range==='90d'){ const d=new Date(now); d.setDate(d.getDate()-90); return d; }
+  if (range==='1y'){ const d=new Date(now); d.setFullYear(d.getFullYear()-1); return d; }
+  return null;
+}
+function recordsInRange(range){
+  const start = rangeStartDate(range);
+  if (!start) return State.records;
+  return State.records.filter(r => new Date(r.startTime) >= start);
+}
+
+function renderStatsTab(){
+  const v = State.statsView;
+  const ranges = [['7d','近7天'],['30d','近30天'],['90d','近90天'],['1y','近一年'],['all','全部時間']];
+  const rangeChips = ranges.map(([k,l])=>`<button class="chip ${v.range===k?'active':''}" onclick="App.setStatsRange('${k}')">${l}</button>`).join('');
+  const exOptions = State.exercises.map(e=>`<option value="${e.id}" ${v.exerciseId===e.id?'selected':''}>${escapeHtml(e.name)}</option>`).join('');
+
+  const monthReview = renderMonthlyReview();
+
+  return pageWrap('統計', '', `
+    <div class="flex gap-2 overflow-x-auto no-scrollbar mb-4 pb-1">${rangeChips}</div>
+
+    ${monthReview}
+
+    <div class="card p-3 mb-4">
+      <div class="font-bold text-sm mb-2">訓練次數</div>
+      <canvas id="chartFrequency" height="160"></canvas>
+    </div>
+
+    <div class="card p-3 mb-4">
+      <div class="font-bold text-sm mb-2">訓練部位分佈</div>
+      <canvas id="chartMuscle" height="200"></canvas>
+    </div>
+
+    <div class="card p-3 mb-4">
+      <div class="flex justify-between items-center mb-2">
+        <div class="font-bold text-sm">最大重量趨勢</div>
+        <select class="input" style="width:auto;" onchange="App.setStatsExercise(this.value)">
+          <option value="">選擇動作</option>${exOptions}
+        </select>
+      </div>
+      <canvas id="chartMaxWeight" height="180"></canvas>
+    </div>
+
+    <div class="card p-3 mb-4">
+      <div class="font-bold text-sm mb-2">訓練量趨勢（依上方所選動作）</div>
+      <canvas id="chartVolume" height="180"></canvas>
+    </div>
+
+    <div class="card p-3 mb-4">
+      <div class="flex justify-between items-center mb-2">
+        <div class="font-bold text-sm">體重 / 體脂趨勢</div>
+        <button class="btn btn-primary" style="padding:6px 10px;" onclick="App.openBodyMetricForm()">+ 新增紀錄</button>
+      </div>
+      <canvas id="chartBody" height="180"></canvas>
+    </div>
+    ${renderBodyMetricList()}
+  `);
+}
+App.setStatsRange = function(r){ State.statsView.range = r; App.render(); };
+App.setStatsExercise = function(id){ State.statsView.exerciseId = id || null; App.render(); };
+
+function renderMonthlyReview(){
+  const now = new Date();
+  const thisMK = monthKey(now);
+  const lastDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const lastMK = monthKey(lastDate);
+  const thisRecs = State.records.filter(r=>monthKey(r.startTime)===thisMK);
+  const lastRecs = State.records.filter(r=>monthKey(r.startTime)===lastMK);
+  const vol = recs => recs.reduce((sum,r)=>sum + r.exercises.reduce((s,e)=>s+e.sets.reduce((s2,st)=>s2+(st.completed&&st.weight?st.weight*st.reps:0),0),0),0);
+  const thisVol = vol(thisRecs), lastVol = vol(lastRecs);
+  const diff = lastVol>0 ? Math.round(((thisVol-lastVol)/lastVol)*100) : (thisVol>0?100:0);
+  const muscleCounts = {};
+  thisRecs.forEach(r=>r.exercises.forEach(e=>{
+    const ex = exerciseById(e.exerciseId);
+    (ex?.muscleGroups||[]).forEach(m=>muscleCounts[m]=(muscleCounts[m]||0)+1);
+  }));
+  const topMuscle = Object.entries(muscleCounts).sort((a,b)=>b[1]-a[1])[0];
+  return `
+    <div class="card p-4 mb-4" style="background:linear-gradient(135deg,var(--accent),#eab308); color:#111;border:none;">
+      <div class="font-bold mb-2">📅 本月回顧</div>
+      <div class="text-sm">本月已訓練 <b>${thisRecs.length}</b> 次${lastRecs.length?`（上月 ${lastRecs.length} 次）`:''}</div>
+      <div class="text-sm mt-1">總訓練量較上月 ${diff>=0?'增加':'減少'} <b>${Math.abs(diff)}%</b></div>
+      ${topMuscle ? `<div class="text-sm mt-1">最常訓練部位：<b>${escapeHtml(topMuscle[0])}</b></div>` : ''}
+      <div class="text-sm mt-2 font-semibold">${escapeHtml(pickMotivation())}</div>
+    </div>
+  `;
+}
+
+function renderBodyMetricList(){
+  if (!State.bodyMetrics.length) return `<div class="text-sm text-center py-4" style="color:var(--text2)">尚無體重/體脂紀錄</div>`;
+  const items = State.bodyMetrics.slice(0,10).map(m => `
+    <div class="card p-3 mb-2 flex justify-between items-center">
+      <div>
+        <div class="font-bold text-sm">${toDisplayWeight(m.weight)} ${weightLabel()}${m.bodyFat!==undefined&&m.bodyFat!==null?` · 體脂 ${m.bodyFat}%`:''}</div>
+        <div class="text-xs" style="color:var(--text2)">${fmtDate(m.recordedAt)} ${fmtTime(m.recordedAt)}${m.notes?` · ${escapeHtml(m.notes)}`:''}</div>
+      </div>
+      <button class="text-xs" style="color:var(--danger)" onclick="App.deleteBodyMetric('${m.id}')">刪除</button>
+    </div>
+  `).join('');
+  return `<div class="mt-2">${items}</div>`;
+}
+App.openBodyMetricForm = function(){
+  App.showModalHtml(`
+    <div class="font-bold text-base mb-3">新增身體指標</div>
+    <div class="space-y-3">
+      <div><label class="text-xs" style="color:var(--text2)">體重 (${weightLabel()})</label><input id="bmWeight" type="number" step="0.1" class="input mt-1"></div>
+      <div><label class="text-xs" style="color:var(--text2)">體脂 %（選填）</label><input id="bmFat" type="number" step="0.1" class="input mt-1"></div>
+      <div><label class="text-xs" style="color:var(--text2)">備註（選填）</label><input id="bmNotes" class="input mt-1"></div>
+      <button class="btn btn-primary w-full" onclick="App.saveBodyMetric()">儲存</button>
+    </div>
+  `);
+};
+App.saveBodyMetric = async function(){
+  const weightVal = document.getElementById('bmWeight').value;
+  if (!weightVal){ App.toast('請輸入體重'); return; }
+  const fatVal = document.getElementById('bmFat').value;
+  const obj = {
+    id: uid(), recordedAt: nowISO(),
+    weight: toStoreWeight(weightVal),
+    bodyFat: fatVal ? parseFloat(fatVal) : undefined,
+    notes: document.getElementById('bmNotes').value.trim()
+  };
+  await dbPut('bodyMetrics', obj);
+  await App.reloadAll();
+  App.closeModal();
+  App.render();
+};
+App.deleteBodyMetric = async function(id){
+  await dbDelete('bodyMetrics', id);
+  await App.reloadAll();
+  App.render();
+};
+
+function chartColors(n){
+  const base = ['#6366f1','#f97316','#22c55e','#ec4899','#06b6d4','#eab308','#a855f7','#ef4444','#14b8a6','#84cc16'];
+  const out = []; for (let i=0;i<n;i++) out.push(base[i%base.length]);
+  return out;
+}
+function chartTextColor(){ return getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#111'; }
+function chartGridColor(){ return getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#eee'; }
+
+App.initStatsCharts = function(){
+  destroyCharts();
+  const recs = recordsInRange(State.statsView.range);
+  const textColor = chartTextColor(), gridColor = chartGridColor();
+
+  // 訓練次數（依週分組）
+  const freqMap = {};
+  recs.forEach(r => { const wk = isoWeekKey(r.startTime); freqMap[wk] = (freqMap[wk]||0)+1; });
+  const freqKeys = Object.keys(freqMap).sort();
+  chartInstances.freq = new Chart(document.getElementById('chartFrequency'), {
+    type: 'bar',
+    data: { labels: freqKeys, datasets: [{ label:'訓練次數', data: freqKeys.map(k=>freqMap[k]), backgroundColor:'#6366f1', borderRadius:6 }] },
+    options: { plugins:{ legend:{display:false} }, scales:{ x:{ ticks:{color:textColor}, grid:{color:gridColor} }, y:{ beginAtZero:true, ticks:{color:textColor, precision:0}, grid:{color:gridColor} } } }
+  });
+
+  // 部位分佈
+  const muscleMap = {};
+  recs.forEach(r => r.exercises.forEach(e => {
+    const ex = exerciseById(e.exerciseId);
+    (ex?.muscleGroups||[]).forEach(m => muscleMap[m]=(muscleMap[m]||0)+1);
+  }));
+  const muscleKeys = Object.keys(muscleMap);
+  chartInstances.muscle = new Chart(document.getElementById('chartMuscle'), {
+    type: 'pie',
+    data: { labels: muscleKeys, datasets: [{ data: muscleKeys.map(k=>muscleMap[k]), backgroundColor: chartColors(muscleKeys.length) }] },
+    options: { plugins:{ legend:{ position:'bottom', labels:{color:textColor, boxWidth:12, font:{size:10} } } } }
+  });
+
+  // 最大重量趨勢 & 訓練量趨勢
+  const exId = State.statsView.exerciseId;
+  let mwLabels=[], mwData=[], volLabels=[], volData=[];
+  if (exId){
+    const relevant = recs.filter(r=>r.exercises.some(e=>e.exerciseId===exId)).sort((a,b)=>new Date(a.startTime)-new Date(b.startTime));
+    relevant.forEach(r => {
+      const e = r.exercises.find(x=>x.exerciseId===exId);
+      const maxW = Math.max(0, ...e.sets.filter(s=>s.completed).map(s=>s.weight||0));
+      const vol = e.sets.filter(s=>s.completed).reduce((sum,s)=>sum+(s.weight||0)*(s.reps||0),0);
+      mwLabels.push(fmtDateShort(r.startTime)); mwData.push(Math.round(toDisplayWeight(maxW)*100)/100);
+      volLabels.push(fmtDateShort(r.startTime)); volData.push(Math.round(toDisplayWeight(vol)*100)/100);
+    });
+  }
+  chartInstances.maxWeight = new Chart(document.getElementById('chartMaxWeight'), {
+    type: 'line',
+    data: { labels: mwLabels, datasets: [{ label:`最大重量 (${weightLabel()})`, data: mwData, borderColor:'#f97316', backgroundColor:'#f97316', tension:.3 }] },
+    options: { plugins:{ legend:{display:false} }, scales:{ x:{ ticks:{color:textColor}, grid:{color:gridColor} }, y:{ ticks:{color:textColor}, grid:{color:gridColor} } } }
+  });
+  chartInstances.volume = new Chart(document.getElementById('chartVolume'), {
+    type: 'line',
+    data: { labels: volLabels, datasets: [{ label:`訓練量 (${weightLabel()})`, data: volData, borderColor:'#22c55e', backgroundColor:'#22c55e', tension:.3 }] },
+    options: { plugins:{ legend:{display:false} }, scales:{ x:{ ticks:{color:textColor}, grid:{color:gridColor} }, y:{ ticks:{color:textColor}, grid:{color:gridColor} } } }
+  });
+
+  // 體重/體脂
+  const bms = [...State.bodyMetrics].sort((a,b)=>new Date(a.recordedAt)-new Date(b.recordedAt));
+  chartInstances.body = new Chart(document.getElementById('chartBody'), {
+    type: 'line',
+    data: { labels: bms.map(m=>fmtDateShort(m.recordedAt)), datasets: [
+      { label:`體重 (${weightLabel()})`, data: bms.map(m=>toDisplayWeight(m.weight)), borderColor:'#6366f1', backgroundColor:'#6366f1', tension:.3, yAxisID:'y' },
+      { label:'體脂 (%)', data: bms.map(m=>m.bodyFat===undefined||m.bodyFat===null?null:m.bodyFat), borderColor:'#ec4899', backgroundColor:'#ec4899', tension:.3, yAxisID:'y1' },
+    ] },
+    options: { plugins:{ legend:{labels:{color:textColor}} }, scales:{
+      x:{ ticks:{color:textColor}, grid:{color:gridColor} },
+      y:{ position:'left', ticks:{color:textColor}, grid:{color:gridColor} },
+      y1:{ position:'right', ticks:{color:textColor}, grid:{drawOnChartArea:false} },
+    } }
+  });
+};
+
+/* ============================== SETTINGS TAB (我的) ============================== */
+function renderSettingsTab(){
+  const s = State.settings;
+  return pageWrap('我的', '', `
+    <div class="card p-4 mb-4">
+      <div class="font-bold text-sm mb-3">單位</div>
+      <div class="flex gap-2">
+        <button class="btn ${s.unit==='metric'?'btn-primary':'btn-secondary'} flex-1" onclick="App.setUnit('metric')">公制 (kg/km)</button>
+        <button class="btn ${s.unit==='imperial'?'btn-primary':'btn-secondary'} flex-1" onclick="App.setUnit('imperial')">英制 (lb/mi)</button>
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <div class="font-bold text-sm mb-3">主題</div>
+      <div class="flex gap-2">
+        <button class="btn ${s.theme==='light'?'btn-primary':'btn-secondary'} flex-1" onclick="App.setTheme('light')">淺色</button>
+        <button class="btn ${s.theme==='dark'?'btn-primary':'btn-secondary'} flex-1" onclick="App.setTheme('dark')">深色</button>
+        <button class="btn ${s.theme==='auto'?'btn-primary':'btn-secondary'} flex-1" onclick="App.setTheme('auto')">自動</button>
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <div class="font-bold text-sm mb-3">自訂標籤</div>
+      <div class="flex gap-2 flex-wrap mb-3">
+        ${State.tags.map(t=>`<span class="chip flex items-center gap-1">${escapeHtml(t.name)} <button onclick="App.deleteTag('${t.id}')" style="color:var(--danger)">✕</button></span>`).join('') || '<span class="text-sm" style="color:var(--text2)">尚無標籤</span>'}
+      </div>
+      <div class="flex gap-2">
+        <input id="newTagInput" class="input" placeholder="新增標籤">
+        <button class="btn btn-secondary" onclick="App.addTag()">新增</button>
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <div class="font-bold text-sm mb-2">備份與還原</div>
+      <div class="text-xs mb-3" style="color:var(--text2)">所有資料僅儲存在此裝置上，建議定期匯出備份，避免清除瀏覽器資料或更換裝置時遺失紀錄。</div>
+      <div class="flex gap-2">
+        <button class="btn btn-primary flex-1" onclick="App.exportData()">匯出備份</button>
+        <button class="btn btn-secondary flex-1" onclick="document.getElementById('importFile').click()">匯入備份</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json" class="hidden" onchange="App.importData(event)">
+    </div>
+
+    <div class="text-center text-xs mt-6" style="color:var(--text2)">健身訓練追蹤 App · v1.0 · 純本地儲存</div>
+  `);
+}
+App.setUnit = function(u){ State.settings.unit = u; saveSettings(State.settings); App.render(); };
+App.setTheme = function(t){ State.settings.theme = t; saveSettings(State.settings); applyTheme(t); App.render(); };
+App.addTag = async function(){
+  const input = document.getElementById('newTagInput');
+  const name = input.value.trim();
+  if (!name) return;
+  if (State.tags.some(t=>t.name===name)){ App.toast('標籤已存在'); return; }
+  await dbPut('tags', { id: uid(), name, createdAt: nowISO() });
+  await App.reloadAll();
+  App.render();
+};
+App.deleteTag = async function(id){
+  await dbDelete('tags', id);
+  await App.reloadAll();
+  App.render();
+};
+
+App.exportData = async function(){
+  const [exercises, templates, records, bodyMetrics, tags] = await Promise.all([
+    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('records'), dbGetAll('bodyMetrics'), dbGetAll('tags')
+  ]);
+  const payload = {
+    exportedAt: nowISO(), version: 1,
+    settings: State.settings,
+    exercises, templates, records, bodyMetrics, tags
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `fitness-backup-${dateKey(new Date())}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  App.toast('已匯出備份檔案');
+};
+App.importData = function(event){
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    let data;
+    try{ data = JSON.parse(e.target.result); }
+    catch(err){ App.toast('檔案格式錯誤，無法匯入'); return; }
+    if (!data || typeof data !== 'object'){ App.toast('檔案內容無效'); return; }
+    const ok = await App.showConfirm('匯入將會覆蓋目前裝置上的所有資料，確定要繼續嗎？', '匯入備份', '匯入', '取消');
+    if (!ok){ event.target.value=''; return; }
+    try{
+      await Promise.all(STORES.map(s => dbClear(s)));
+      if (Array.isArray(data.exercises)) await dbBulkPut('exercises', data.exercises);
+      if (Array.isArray(data.templates)) await dbBulkPut('templates', data.templates);
+      if (Array.isArray(data.records)) await dbBulkPut('records', data.records);
+      if (Array.isArray(data.bodyMetrics)) await dbBulkPut('bodyMetrics', data.bodyMetrics);
+      if (Array.isArray(data.tags)) await dbBulkPut('tags', data.tags);
+      if (data.settings){ State.settings = Object.assign(loadSettings(), data.settings); saveSettings(State.settings); applyTheme(State.settings.theme); }
+      await seedIfEmpty();
+      await App.reloadAll();
+      App.toast('匯入完成');
+      App.render();
+    }catch(err){
+      App.toast('匯入過程發生錯誤');
+      console.error(err);
+    }
+    event.target.value='';
+  };
+  reader.readAsText(file);
+};
+
+/* ============================== Start ============================== */
+document.addEventListener('DOMContentLoaded', () => App.init());
+})();
+</script>
+</body>
+</html>
