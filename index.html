@@ -639,15 +639,22 @@ function renderExercisesTab(){
   if (v.subview === 'detail') return renderExerciseDetail(v.editId);
 
   const cats = ['全部', ...CATEGORIES];
-  const catChips = cats.map(c => `<button class="chip ${v.category===c?'active':''}" onclick="App.setExerciseFilter('category','${c}')">${c}</button>`).join('');
+  const catChips = cats.map(c => `<button class="chip ${v.category===c?'active':''}" onclick="App.setExerciseCategory('${c}')">${c}</button>`).join('');
 
+  return pageWrap('動作庫', `<button class="btn btn-primary" style="padding:8px 14px;" onclick="App.openExerciseForm(null)">+ 新增</button>`, `
+    <input id="exerciseSearchInput" class="input mb-3" placeholder="搜尋動作名稱" value="${escapeHtml(v.search)}" oninput="App.onExerciseSearchInput(this.value)">
+    <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3 pb-1">${catChips}</div>
+    <div id="exerciseListContainer">${renderExerciseListHtml()}</div>
+  `);
+}
+function renderExerciseListHtml(){
+  const v = State.exercisesView;
   let list = State.exercises.filter(e => v.category==='全部' || e.category===v.category);
   if (v.search){
     const q = v.search.toLowerCase();
     list = list.filter(e => e.name.toLowerCase().includes(q));
   }
-
-  const items = list.map(e => `
+  return list.map(e => `
     <div class="card p-3 mb-2 flex gap-3 items-center" onclick="App.openExerciseDetail('${e.id}')">
       <div class="w-14 h-14 rounded-xl overflow-hidden placeholder-img shrink-0">
         ${e.imageUrl ? `<img src="${escapeHtml(e.imageUrl)}" onerror="this.remove()" class="w-full h-full object-cover">` : ''}
@@ -658,23 +665,16 @@ function renderExercisesTab(){
       </div>
     </div>
   `).join('') || `<div class="text-sm text-center py-8" style="color:var(--text2)">找不到符合的動作</div>`;
-
-  return pageWrap('動作庫', `<button class="btn btn-primary" style="padding:8px 14px;" onclick="App.openExerciseForm(null)">+ 新增</button>`, `
-    <input class="input mb-3" placeholder="搜尋動作名稱" value="${escapeHtml(v.search)}" oninput="App.setExerciseFilter('search', this.value)">
-    <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3 pb-1">${catChips}</div>
-    ${items}
-  `);
 }
-App.setExerciseFilter = function(key, val){
-  State.exercisesView[key] = val;
-  if (key === 'search'){
-    const el = document.activeElement;
-    App.render();
-    const input = document.querySelector('#app input[placeholder="搜尋動作名稱"]');
-    if (input){ input.focus(); input.selectionStart = input.selectionEnd = input.value.length; }
-  } else {
-    App.render();
-  }
+App.setExerciseCategory = function(cat){
+  State.exercisesView.category = cat;
+  App.render();
+};
+App.onExerciseSearchInput = function(val){
+  // 只更新結果清單容器，絕不重繪搜尋框本身——否則會打斷注音/拼音等組字中的輸入法
+  State.exercisesView.search = val;
+  const container = document.getElementById('exerciseListContainer');
+  if (container) container.innerHTML = renderExerciseListHtml();
 };
 App.openExerciseForm = function(id){
   State.exercisesView.subview = 'form';
