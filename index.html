@@ -166,6 +166,12 @@ function debounce(fn, ms){
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(()=>fn(...args), ms); };
 }
+function b64EncodeUnicode(str){
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode(parseInt(p1, 16))));
+}
+function b64DecodeUnicode(str){
+  return decodeURIComponent(atob(str).split('').map(c => '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+}
 function dateKey(d){
   d = new Date(d);
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
@@ -454,6 +460,19 @@ App.init = async function(){
   });
   await seedIfEmpty();
   await App.reloadAll();
+
+  const shareParam = new URLSearchParams(location.search).get('share');
+  if (shareParam){
+    const cleanUrl = new URL(location.href);
+    cleanUrl.searchParams.delete('share');
+    history.replaceState(null, '', cleanUrl.toString());
+    try{
+      const payload = JSON.parse(b64DecodeUnicode(shareParam));
+      if (payload && payload.type === 'ft_share_template' && Array.isArray(payload.exercises)){
+        await App.promptImportSharedTemplate(payload);
+      }
+    }catch(e){ console.error('分享菜單解析失敗', e); }
+  }
 
   const draft = loadDraft();
   if (draft){
@@ -828,8 +847,11 @@ function renderTemplatesTab(){
       </div>
       <div class="flex gap-2 mt-2">
         <button class="btn btn-primary flex-1" style="padding:6px;" onclick="App.startFromTemplate('${t.id}')">開始訓練</button>
-        <button class="btn btn-secondary" style="padding:6px 10px;" onclick="App.editTemplate('${t.id}')">編輯</button>
-        <button class="btn btn-secondary" style="padding:6px 10px;" onclick="App.deleteTemplate('${t.id}')">刪除</button>
+      </div>
+      <div class="flex gap-2 mt-2">
+        <button class="btn btn-secondary flex-1" style="padding:6px;" onclick="App.shareTemplate('${t.id}')">🔗 分享</button>
+        <button class="btn btn-secondary flex-1" style="padding:6px;" onclick="App.editTemplate('${t.id}')">編輯</button>
+        <button class="btn btn-secondary flex-1" style="padding:6px;" onclick="App.deleteTemplate('${t.id}')">刪除</button>
       </div>
     </div>
   `).join('') || `<div class="text-sm text-center py-8" style="color:var(--text2)">尚未建立菜單，點右上角新增一個吧</div>`;
@@ -953,6 +975,90 @@ App.saveTemplate = async function(){
   App.backToTemplateList();
 };
 App.viewTemplateOptions = function(id){ App.editTemplate(id); };
+
+/* ---- 分享菜單給朋友 ---- */
+function buildShareableTemplatePayload(t){
+  return {
+    type: 'ft_share_template', v: 1, name: t.name,
+    exercises: t.exercises.map(te => {
+      const ex = exerciseById(te.exerciseId) || {};
+      return {
+        name: ex.name || '未知動作', category: ex.category || CATEGORIES[0], equipment: ex.equipment || EQUIPMENT[0],
+        muscleGroups: ex.muscleGroups || [], trackingType: ex.trackingType || 'weight_reps',
+        supportsUnilateral: !!ex.supportsUnilateral,
+        variant: te.variant, notes: te.notes || '',
+        plannedSets: te.plannedSets.map(s => ({ setNumber:s.setNumber, weight:s.weight, distance:s.distance, reps:s.reps })),
+      };
+    }),
+  };
+}
+App.shareTemplate = async function(id){
+  const t = templateById(id);
+  const encoded = b64EncodeUnicode(JSON.stringify(buildShareableTemplatePayload(t)));
+  const url = new URL(location.href);
+  url.hash = '';
+  url.searchParams.set('share', encoded);
+  const shareUrl = url.toString();
+  const shareText = `我用「健身訓練追蹤」設計了一份菜單「${t.name}」，點連結就能匯入使用：`;
+
+  if (navigator.share){
+    try{ await navigator.share({ title: t.name, text: shareText, url: shareUrl }); }
+    catch(e){ /* 使用者取消分享，忽略即可 */ }
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(shareUrl);
+    App.toast('分享連結已複製，貼給朋友吧！');
+  }catch(e){
+    App.showModalHtml(`
+      <div class="font-bold text-base mb-3">分享菜單</div>
+      <input class="input mb-2" readonly value="${escapeHtml(shareUrl)}" onclick="this.select()">
+      <div class="text-xs" style="color:var(--text2)">請手動複製上面的連結傳給朋友</div>
+    `);
+  }
+};
+App.promptImportSharedTemplate = function(payload){
+  return new Promise(resolve => {
+    App.showModalHtml(`
+      <div class="text-center">
+        <div class="text-base font-bold mb-2">匯入分享的菜單</div>
+        <div class="text-sm mb-5" style="color:var(--text2)">是否要把「${escapeHtml(payload.name)}」（共 ${payload.exercises.length} 個動作）加入你的菜單？</div>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary flex-1" id="shareImportCancel">不用了</button>
+          <button class="btn btn-primary flex-1" id="shareImportOk">匯入</button>
+        </div>
+      </div>
+    `);
+    document.getElementById('shareImportOk').onclick = async () => {
+      App.closeModal();
+      await App.importSharedTemplate(payload);
+      resolve(true);
+    };
+    document.getElementById('shareImportCancel').onclick = () => { App.closeModal(); resolve(false); };
+  });
+};
+App.importSharedTemplate = async function(payload){
+  const exercises = [];
+  for (const se of payload.exercises){
+    let match = State.exercises.find(e => e.name===se.name && e.category===se.category && e.equipment===se.equipment);
+    if (!match){
+      match = {
+        id: uid(), name: se.name, category: se.category, equipment: se.equipment,
+        muscleGroups: se.muscleGroups || [], imageUrl: '', description: '', isCustom: true,
+        supportsUnilateral: !!se.supportsUnilateral, trackingType: se.trackingType || 'weight_reps',
+      };
+      await dbPut('exercises', match);
+      State.exercises.push(match);
+    }
+    exercises.push({ exerciseId: match.id, order: exercises.length, variant: se.variant, plannedSets: se.plannedSets, notes: se.notes || '' });
+  }
+  const tpl = { id: uid(), name: payload.name, createdAt: nowISO(), updatedAt: nowISO(), exercises };
+  await dbPut('templates', tpl);
+  await App.reloadAll();
+  State.tab = 'templates';
+  App.render();
+  App.toast(`已匯入菜單「${payload.name}」`);
+};
 
 /* ============================== 訓練 SESSION ============================== */
 function snapshotSetsFromTemplateExercise(te){
@@ -1709,6 +1815,12 @@ function renderSettingsTab(){
       <input type="file" id="importFile" accept="application/json" class="hidden" onchange="App.importData(event)">
     </div>
 
+    <div class="card p-4 mb-4">
+      <div class="font-bold text-sm mb-2" style="color:var(--danger)">清除所有資料</div>
+      <div class="text-xs mb-3" style="color:var(--text2)">會刪除這個裝置上所有的動作庫自訂項目、菜單、訓練紀錄與身體指標（單位、主題設定不受影響），此動作無法復原，請先確認已經匯出備份。</div>
+      <button class="btn btn-danger w-full" onclick="App.clearAllData()">清除所有資料</button>
+    </div>
+
     <div class="text-center text-xs mt-6" style="color:var(--text2)">健身訓練追蹤 App · v1.0 · 純本地儲存</div>
   `);
 }
@@ -1777,6 +1889,19 @@ App.importData = function(event){
     event.target.value='';
   };
   reader.readAsText(file);
+};
+App.clearAllData = async function(){
+  const ok1 = await App.showConfirm('這會刪除這個裝置上所有的動作庫自訂項目、菜單、訓練紀錄與身體指標，且無法復原。建議先到上方「匯出備份」存一份。確定要繼續嗎？', '清除所有資料', '繼續', '取消');
+  if (!ok1) return;
+  const ok2 = await App.showConfirm('再次確認：這是最後一步，清除後將無法復原。', '真的要清除嗎？', '清除所有資料', '取消');
+  if (!ok2) return;
+  await Promise.all(STORES.map(s => dbClear(s)));
+  clearDraft();
+  await seedIfEmpty();
+  await App.reloadAll();
+  State.tab = 'home';
+  App.toast('已清除所有資料');
+  App.render();
 };
 
 /* ============================== Start ============================== */
