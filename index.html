@@ -174,6 +174,15 @@ function monthKey(d){
   d = new Date(d);
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
 }
+function toTimeInputValue(d){
+  d = new Date(d);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function combineDateTimeLocal(dateStr, timeStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const [hh,mm] = (timeStr||'08:00').split(':').map(Number);
+  return new Date(y, m-1, d, hh, mm, 0, 0).toISOString();
+}
 function isoWeekKey(d){
   d = new Date(d);
   const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -986,6 +995,110 @@ App.startSessionTimer = function(){
   if (State.sessionTimerHandle) clearInterval(State.sessionTimerHandle);
   State.sessionTimerHandle = setInterval(attachSessionTimerDisplay, 1000);
 };
+
+/* ---- 補記錄過去的訓練 ---- */
+App.openBackfillModal = function(){
+  const todayStr = dateKey(new Date());
+  App.showModalHtml(`
+    <div class="font-bold text-base mb-3">補記錄過去的訓練</div>
+    <div class="space-y-3 mb-4">
+      <div><label class="text-xs" style="color:var(--text2)">訓練日期</label>
+        <input id="bfDate" type="date" class="input mt-1" value="${todayStr}" max="${todayStr}"></div>
+      <div class="flex gap-2">
+        <div class="flex-1"><label class="text-xs" style="color:var(--text2)">開始時間</label>
+          <input id="bfTime" type="time" class="input mt-1" value="08:00"></div>
+        <div class="flex-1"><label class="text-xs" style="color:var(--text2)">時長（分鐘）</label>
+          <input id="bfDuration" type="number" class="input mt-1" value="60"></div>
+      </div>
+    </div>
+    <button class="btn btn-primary w-full mb-2" onclick="App.backfillPickTemplate()">從既有菜單開始</button>
+    <button class="btn btn-secondary w-full" onclick="App.backfillStartBlank()">空白訓練，自己加動作</button>
+  `);
+};
+App.readBackfillFormValues = function(){
+  const dateEl = document.getElementById('bfDate');
+  const timeEl = document.getElementById('bfTime');
+  const durEl = document.getElementById('bfDuration');
+  if (!dateEl || !dateEl.value){ App.toast('請選擇日期'); return null; }
+  const duration = Math.max(1, parseInt(durEl.value)||60);
+  return { iso: combineDateTimeLocal(dateEl.value, timeEl.value), duration };
+};
+App.backfillPickTemplate = function(){
+  const info = App.readBackfillFormValues();
+  if (!info) return;
+  const items = State.templates.map(t => `
+    <div class="card p-3 mb-2" onclick="App.startBackfillFromTemplate('${t.id}','${info.iso}',${info.duration})">
+      <div class="font-bold text-sm">${escapeHtml(t.name)}</div>
+      <div class="text-xs" style="color:var(--text2)">${t.exercises.length} 個動作</div>
+    </div>
+  `).join('') || `<div class="text-sm text-center py-6" style="color:var(--text2)">尚未建立任何菜單</div>`;
+  App.showModalHtml(`
+    <div class="flex justify-between items-center mb-3">
+      <div class="font-bold text-base">選擇菜單</div>
+      <button class="btn-ghost text-sm" onclick="App.closeModal()">關閉</button>
+    </div>
+    ${items}
+  `);
+};
+App.backfillStartBlank = function(){
+  const info = App.readBackfillFormValues();
+  if (!info) return;
+  App.startBackfillBlank(info.iso, info.duration);
+};
+App.startBackfillFromTemplate = function(templateId, startIso, duration){
+  const t = templateById(templateId);
+  const session = {
+    templateId: t.id,
+    templateNameSnapshot: t.name,
+    startTime: startIso,
+    tags: [],
+    overallNotes: '',
+    isBackfill: true,
+    backfillDurationMinutes: duration,
+    exercises: t.exercises.map(te => ({
+      exerciseId: te.exerciseId,
+      exerciseNameSnapshot: exerciseById(te.exerciseId)?.name || '未知動作',
+      order: te.order,
+      variant: te.variant,
+      notes: te.notes || '',
+      sets: snapshotSetsFromTemplateExercise(te),
+      trackingType: exerciseById(te.exerciseId)?.trackingType || 'weight_reps',
+    })),
+    originalTemplateSnapshot: JSON.parse(JSON.stringify(t)),
+  };
+  State.session = session;
+  saveDraft(session);
+  App.closeModal();
+  App.render();
+};
+App.startBackfillBlank = function(startIso, duration){
+  State.session = {
+    templateId: null, templateNameSnapshot: null, startTime: startIso,
+    tags: [], overallNotes: '', exercises: [], originalTemplateSnapshot: null,
+    isBackfill: true, backfillDurationMinutes: duration,
+  };
+  saveDraft(State.session);
+  App.closeModal();
+  App.render();
+};
+App.sessUpdateBackfillDate = function(val){
+  const t = new Date(State.session.startTime);
+  const [y,m,d] = val.split('-').map(Number);
+  t.setFullYear(y, m-1, d);
+  State.session.startTime = t.toISOString();
+  persistDraft();
+};
+App.sessUpdateBackfillTime = function(val){
+  const t = new Date(State.session.startTime);
+  const [hh,mm] = val.split(':').map(Number);
+  t.setHours(hh, mm, 0, 0);
+  State.session.startTime = t.toISOString();
+  persistDraft();
+};
+App.sessUpdateBackfillDuration = function(val){
+  State.session.backfillDurationMinutes = Math.max(1, parseInt(val)||1);
+  persistDraft();
+};
 function attachSessionTimerDisplay(){
   const el = document.getElementById('sessionTimer');
   if (!el || !State.session) return;
@@ -1043,14 +1156,25 @@ function renderSession(){
     `;
   }).join('') || `<div class="text-sm text-center py-6" style="color:var(--text2)">尚未加入任何動作</div>`;
 
+  const headerMiddle = s.isBackfill
+    ? `<div class="text-xs font-bold px-2" style="color:var(--text2)">📅 補記錄</div>`
+    : `<div id="sessionTimer" class="text-lg font-mono font-bold">00:00</div>`;
+  const backfillBar = s.isBackfill ? `
+      <div class="flex gap-2 mt-2">
+        <input type="date" class="input" value="${dateKey(s.startTime)}" onchange="App.sessUpdateBackfillDate(this.value)">
+        <input type="time" class="input" value="${toTimeInputValue(s.startTime)}" onchange="App.sessUpdateBackfillTime(this.value)">
+        <input type="number" class="input" style="max-width:88px;" value="${s.backfillDurationMinutes}" placeholder="分鐘" onchange="App.sessUpdateBackfillDuration(this.value)">
+      </div>` : '';
+
   return `
     <div class="px-4 pt-safe pb-3 sticky top-0 z-10" style="background:var(--bg);">
       <div class="flex justify-between items-center mb-2">
         <button class="btn-ghost text-sm" onclick="App.cancelSession()">取消訓練</button>
-        <div id="sessionTimer" class="text-lg font-mono font-bold">00:00</div>
+        ${headerMiddle}
         <button class="btn btn-primary" style="padding:6px 14px;" onclick="App.finishSession()">完成</button>
       </div>
       <h1 class="text-xl font-extrabold">${escapeHtml(s.templateNameSnapshot || '空白訓練')}</h1>
+      ${backfillBar}
     </div>
     <div class="px-4 pb-24">
       <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3">${tagChips}</div>
@@ -1138,8 +1262,14 @@ App.finishSession = async function(){
     App.toast('請至少加入一個動作再完成訓練');
     return;
   }
-  const endTime = nowISO();
-  const duration = Math.max(1, Math.round((new Date(endTime)-new Date(s.startTime))/60000));
+  let endTime, duration;
+  if (s.isBackfill){
+    duration = Math.max(1, s.backfillDurationMinutes || 1);
+    endTime = new Date(new Date(s.startTime).getTime() + duration*60000).toISOString();
+  } else {
+    endTime = nowISO();
+    duration = Math.max(1, Math.round((new Date(endTime)-new Date(s.startTime))/60000));
+  }
 
   let savedAsTemplateUpdate = false;
   if (s.templateId){
@@ -1222,8 +1352,10 @@ function renderHistoryTab(){
   const v = State.historyView;
   if (v.subview === 'detail') return renderHistoryDetail(v.openId);
 
+  const backfillBtn = `<button class="btn btn-primary" style="padding:8px 14px;" onclick="App.openBackfillModal()">+ 補記錄</button>`;
+
   if (!State.records.length){
-    return pageWrap('訓練紀錄', '', `<div class="text-sm text-center py-8" style="color:var(--text2)">還沒有任何訓練紀錄</div>`);
+    return pageWrap('訓練紀錄', backfillBtn, `<div class="text-sm text-center py-8" style="color:var(--text2)">還沒有任何訓練紀錄</div>`);
   }
   const groups = {};
   State.records.forEach(r => {
@@ -1247,7 +1379,7 @@ function renderHistoryTab(){
     return `<div class="text-xs font-bold mt-3 mb-1" style="color:var(--text2)">${y}年${parseInt(m)}月</div>${items}`;
   }).join('');
 
-  return pageWrap('訓練紀錄', '', html);
+  return pageWrap('訓練紀錄', backfillBtn, html);
 }
 App.openHistoryDetail = function(id){
   State.historyView.subview = 'detail';
