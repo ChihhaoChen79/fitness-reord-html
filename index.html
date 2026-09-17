@@ -99,7 +99,7 @@
       <span class="text-lg">📈</span><span class="text-2xs">統計</span>
     </button>
     <button onclick="App.setTab('settings')" data-navtab="settings" class="navbtn py-2 flex flex-col items-center gap-0.5">
-      <span class="text-lg">⚙️</span><span class="text-2xs">我的</span>
+      <span class="text-lg">⚙️</span><span class="text-2xs">設定</span>
     </button>
   </div>
 </nav>
@@ -440,7 +440,7 @@ const State = {
   tab: 'home',
   settings: loadSettings(),
   exercises: [], templates: [], tags: [], records: [], bodyMetrics: [],
-  exercisesView: { category:'全部', equipment:'全部', search:'', subview:'list', editId:null },
+  exercisesView: { category:'全部', equipment:'全部', search:'', viewMode:'all', subview:'list', editId:null },
   templatesView: { subview:'list', editId:null, draft:null },
   historyView: { subview:'list', openId:null, editBuffer:null },
   statsView: { range:'all', exerciseId:null, volumeScope:'exercise' },
@@ -461,17 +461,30 @@ App.init = async function(){
   await seedIfEmpty();
   await App.reloadAll();
 
-  const shareParam = new URLSearchParams(location.search).get('share');
-  if (shareParam){
+  const searchParams = new URLSearchParams(location.search);
+  const shareParam = searchParams.get('share');
+  const shareExerciseParam = searchParams.get('shareExercise');
+  if (shareParam || shareExerciseParam){
     const cleanUrl = new URL(location.href);
     cleanUrl.searchParams.delete('share');
+    cleanUrl.searchParams.delete('shareExercise');
     history.replaceState(null, '', cleanUrl.toString());
+  }
+  if (shareParam){
     try{
       const payload = JSON.parse(b64DecodeUnicode(shareParam));
       if (payload && payload.type === 'ft_share_template' && Array.isArray(payload.exercises)){
         await App.promptImportSharedTemplate(payload);
       }
     }catch(e){ console.error('分享菜單解析失敗', e); }
+  }
+  if (shareExerciseParam){
+    try{
+      const payload = JSON.parse(b64DecodeUnicode(shareExerciseParam));
+      if (payload && payload.type === 'ft_share_exercise' && payload.name){
+        await App.promptImportSharedExercise(payload);
+      }
+    }catch(e){ console.error('分享動作解析失敗', e); }
   }
 
   const draft = loadDraft();
@@ -661,6 +674,10 @@ function renderExercisesTab(){
   const catChips = cats.map(c => `<button class="chip ${v.category===c?'active':''}" onclick="App.setExerciseCategory('${c}')">${c}</button>`).join('');
 
   return pageWrap('動作庫', `<button class="btn btn-primary" style="padding:8px 14px;" onclick="App.openExerciseForm(null)">+ 新增</button>`, `
+    <div class="flex gap-2 mb-3">
+      <button class="btn ${v.viewMode==='all'?'btn-primary':'btn-secondary'} flex-1" onclick="App.setExerciseViewMode('all')">全部動作</button>
+      <button class="btn ${v.viewMode==='custom'?'btn-primary':'btn-secondary'} flex-1" onclick="App.setExerciseViewMode('custom')">我的自訂動作</button>
+    </div>
     <input id="exerciseSearchInput" class="input mb-3" placeholder="搜尋動作名稱" value="${escapeHtml(v.search)}" oninput="App.onExerciseSearchInput(this.value)">
     <div class="flex gap-2 overflow-x-auto no-scrollbar mb-3 pb-1">${catChips}</div>
     <div id="exerciseListContainer">${renderExerciseListHtml()}</div>
@@ -669,6 +686,7 @@ function renderExercisesTab(){
 function renderExerciseListHtml(){
   const v = State.exercisesView;
   let list = State.exercises.filter(e => v.category==='全部' || e.category===v.category);
+  if (v.viewMode === 'custom') list = list.filter(e => e.isCustom);
   if (v.search){
     const q = v.search.toLowerCase();
     list = list.filter(e => e.name.toLowerCase().includes(q));
@@ -682,11 +700,16 @@ function renderExerciseListHtml(){
         <div class="font-bold text-sm truncate">${escapeHtml(e.name)} ${e.isCustom?'<span class="chip ml-1" style="padding:2px 6px;">自訂</span>':''}</div>
         <div class="text-xs mt-0.5 truncate" style="color:var(--text2)">${e.category} · ${e.equipment}</div>
       </div>
+      ${e.isCustom ? `<button class="text-lg shrink-0" onclick="event.stopPropagation(); App.shareExercise('${e.id}')" title="分享">🔗</button>` : ''}
     </div>
   `).join('') || `<div class="text-sm text-center py-8" style="color:var(--text2)">找不到符合的動作</div>`;
 }
 App.setExerciseCategory = function(cat){
   State.exercisesView.category = cat;
+  App.render();
+};
+App.setExerciseViewMode = function(mode){
+  State.exercisesView.viewMode = mode;
   App.render();
 };
 App.onExerciseSearchInput = function(val){
@@ -724,6 +747,7 @@ function renderExerciseDetail(id){
     ${e.description ? `<div class="card p-3 text-sm mb-4">${escapeHtml(e.description)}</div>` : ''}
     ${e.isCustom ? `
       <div class="flex gap-2">
+        <button class="btn btn-secondary flex-1" onclick="App.shareExercise('${e.id}')">🔗 分享</button>
         <button class="btn btn-secondary flex-1" onclick="App.openExerciseForm('${e.id}')">編輯</button>
         <button class="btn btn-danger flex-1" onclick="App.deleteExercise('${e.id}')">刪除</button>
       </div>
@@ -786,6 +810,87 @@ App.deleteExercise = async function(id){
   await dbDelete('exercises', id);
   await App.reloadAll();
   App.backToExerciseList();
+};
+
+/* ---- 分享自訂動作給朋友 ---- */
+function buildShareableExercisePayload(e){
+  return {
+    type: 'ft_share_exercise', v: 1,
+    name: e.name, category: e.category, equipment: e.equipment,
+    muscleGroups: e.muscleGroups || [], description: e.description || '',
+    imageUrl: e.imageUrl || '', trackingType: e.trackingType || 'weight_reps',
+    supportsUnilateral: !!e.supportsUnilateral,
+  };
+}
+App.shareExercise = async function(id){
+  const e = exerciseById(id);
+  const encoded = b64EncodeUnicode(JSON.stringify(buildShareableExercisePayload(e)));
+  const url = new URL(location.href);
+  url.hash = '';
+  url.searchParams.set('shareExercise', encoded);
+  const shareUrl = url.toString();
+  const shareText = `我用「健身訓練追蹤」新增了一個自訂動作「${e.name}」，點連結就能匯入使用：`;
+
+  if (navigator.share){
+    try{ await navigator.share({ title: e.name, text: shareText, url: shareUrl }); }
+    catch(err){ /* 使用者取消分享，忽略即可 */ }
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(shareUrl);
+    App.toast('分享連結已複製，貼給朋友吧！');
+  }catch(err){
+    App.showModalHtml(`
+      <div class="font-bold text-base mb-3">分享動作</div>
+      <input class="input mb-2" readonly value="${escapeHtml(shareUrl)}" onclick="this.select()">
+      <div class="text-xs" style="color:var(--text2)">請手動複製上面的連結傳給朋友</div>
+    `);
+  }
+};
+App.promptImportSharedExercise = function(payload){
+  return new Promise(resolve => {
+    const existing = State.exercises.find(e => e.name===payload.name && e.category===payload.category && e.equipment===payload.equipment);
+    if (existing){
+      App.showModalHtml(`
+        <div class="text-center">
+          <div class="text-base font-bold mb-2">已經有這個動作了</div>
+          <div class="text-sm mb-5" style="color:var(--text2)">你的動作庫已經有「${escapeHtml(payload.name)}」，不需要重複加入。</div>
+          <button class="btn btn-primary w-full" id="shareExAck">知道了</button>
+        </div>
+      `);
+      document.getElementById('shareExAck').onclick = () => { App.closeModal(); resolve(false); };
+      return;
+    }
+    App.showModalHtml(`
+      <div class="text-center">
+        <div class="text-base font-bold mb-2">匯入分享的動作</div>
+        <div class="text-sm mb-5" style="color:var(--text2)">是否要把「${escapeHtml(payload.name)}」（${escapeHtml(payload.category)} · ${escapeHtml(payload.equipment)}）加入你的動作庫？</div>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary flex-1" id="shareExCancel">不用了</button>
+          <button class="btn btn-primary flex-1" id="shareExOk">匯入</button>
+        </div>
+      </div>
+    `);
+    document.getElementById('shareExOk').onclick = async () => {
+      App.closeModal();
+      await App.importSharedExercise(payload);
+      resolve(true);
+    };
+    document.getElementById('shareExCancel').onclick = () => { App.closeModal(); resolve(false); };
+  });
+};
+App.importSharedExercise = async function(payload){
+  const exercise = {
+    id: uid(), name: payload.name, category: payload.category, equipment: payload.equipment,
+    muscleGroups: payload.muscleGroups || [], imageUrl: payload.imageUrl || '', description: payload.description || '',
+    isCustom: true, supportsUnilateral: !!payload.supportsUnilateral, trackingType: payload.trackingType || 'weight_reps',
+  };
+  await dbPut('exercises', exercise);
+  await App.reloadAll();
+  State.tab = 'exercises';
+  State.exercisesView.subview = 'list';
+  App.render();
+  App.toast(`已匯入動作「${payload.name}」`);
 };
 
 /* ============================== EXERCISE PICKER (共用) ============================== */
@@ -1773,10 +1878,14 @@ App.initStatsCharts = function(){
   });
 };
 
-/* ============================== SETTINGS TAB (我的) ============================== */
+/* ============================== SETTINGS TAB (設定) ============================== */
 function renderSettingsTab(){
   const s = State.settings;
-  return pageWrap('我的', '', `
+  return pageWrap('設定', '', `
+    <div class="card p-4 mb-4">
+      <button class="btn btn-secondary w-full" onclick="App.openUsageGuide()">📖 使用說明</button>
+    </div>
+
     <div class="card p-4 mb-4">
       <div class="font-bold text-sm mb-3">單位</div>
       <div class="flex gap-2">
@@ -1826,6 +1935,40 @@ function renderSettingsTab(){
 }
 App.setUnit = function(u){ State.settings.unit = u; saveSettings(State.settings); App.render(); };
 App.setTheme = function(t){ State.settings.theme = t; saveSettings(State.settings); applyTheme(t); App.render(); };
+App.openUsageGuide = function(){
+  App.showModalHtml(`
+    <div class="flex justify-between items-center mb-3">
+      <div class="font-bold text-base">使用說明</div>
+      <button class="btn-ghost text-sm" onclick="App.closeModal()">關閉</button>
+    </div>
+    <div class="text-sm space-y-4" style="color:var(--text)">
+      <div>
+        <div class="font-bold mb-1">📚 動作庫</div>
+        <div style="color:var(--text2)">內建常見健身房動作，也可以「+ 新增」自訂動作。點「全部動作／自訂動作」可以只看自己新增的項目。動作詳情頁可以「分享」給朋友，或編輯/刪除自訂動作。</div>
+      </div>
+      <div>
+        <div class="font-bold mb-1">📋 菜單</div>
+        <div style="color:var(--text2)">先建立菜單，把常做的動作、組數、重量存起來，之後開始訓練就不用每次重新設定。菜單卡片可以「分享」給朋友，對方點連結就能匯入。</div>
+      </div>
+      <div>
+        <div class="font-bold mb-1">🏋️ 開始訓練</div>
+        <div style="color:var(--text2)">在首頁選「從既有菜單開始」或「開始空白訓練」。訓練中可以隨時新增動作、調整組數，勾選完成的組數。完成後若內容跟原本菜單不同，會問你要不要更新菜單；空白訓練完成後會問要不要存成新菜單。</div>
+      </div>
+      <div>
+        <div class="font-bold mb-1">📅 補記錄過去的訓練</div>
+        <div style="color:var(--text2)">忘記記錄的訓練可以到「紀錄」頁點「+ 補記錄」，選日期、開始時間、時長，再照平常的方式加動作、填組數即可。</div>
+      </div>
+      <div>
+        <div class="font-bold mb-1">📈 統計</div>
+        <div style="color:var(--text2)">可以看訓練次數、部位分佈、動作最大重量/訓練量趨勢、體重體脂趨勢，以及本月回顧。上方可以切換時間區間。</div>
+      </div>
+      <div>
+        <div class="font-bold mb-1">💾 備份很重要</div>
+        <div style="color:var(--text2)">所有資料只存在這台裝置的瀏覽器裡，沒有雲端同步。清除瀏覽器資料、換手機都會遺失紀錄，請養成定期在「設定」頁「匯出備份」的習慣，換裝置時用「匯入備份」還原。</div>
+      </div>
+    </div>
+  `);
+};
 App.addTag = async function(){
   const input = document.getElementById('newTagInput');
   const name = input.value.trim();
