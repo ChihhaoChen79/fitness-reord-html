@@ -24,7 +24,7 @@ Everything lives in `index.html` inside one IIFE. Two files ship in total:
 - `vendor/chart.umd.js` — Chart.js, vendored locally on purpose (no CDN scripts). Tailwind was likewise replaced by a small hand-written utility-class layer in the `<style>` block. **Do not reintroduce CDN `<script>`/`<link>` dependencies** — the app must keep working fully offline once loaded, since it's meant to be added to the iOS home screen and used at the gym.
 
 ### Data layer
-- IndexedDB (`fitnessTrackerDB`) has five object stores, all keyed by `id`: `exercises`, `templates`, `records`, `bodyMetrics`, `tags`. Thin promise wrappers (`dbGet`, `dbGetAll`, `dbPut`, `dbBulkPut`, `dbDelete`, `dbClear`) wrap the raw IDB calls — always go through these rather than opening transactions directly.
+- IndexedDB (`fitnessTrackerDB`, currently `DB_VERSION = 2`) has object stores, all keyed by `id`: `exercises`, `templates`, `records`, `bodyMetrics`, `tags`, `students`. Thin promise wrappers (`dbGet`, `dbGetAll`, `dbPut`, `dbBulkPut`, `dbDelete`, `dbClear`) wrap the raw IDB calls — always go through these rather than opening transactions directly. Adding a store later means bumping `DB_VERSION` again; `onupgradeneeded` creates whatever's missing from `STORES`, which is what upgrades existing users in place.
 - `localStorage` holds only two things: app settings (`ft_settings`) and the in-progress workout draft (`ft_draft_session`, autosaved via the debounced `persistDraft()` so a session survives a browser reload).
 - On first load, `seedIfEmpty()` inserts the built-in exercise library (`buildSeedExercises()`, ~67 exercises) and default tags if the stores are empty.
 - Records/templates snapshot exercise names at save time (`exerciseNameSnapshot`, `templateNameSnapshot`) so renaming/deleting an exercise or template later never changes historical records.
@@ -46,6 +46,15 @@ Internally everything is stored metric (kg / km). `State.settings.unit` (`metric
 - Backfill sessions (started from the History tab's "+ 補記錄" button, via `App.startBackfillFromTemplate`/`App.startBackfillBlank`) instead show editable date/time/duration fields (`App.sessUpdateBackfillDate/Time/Duration`), and `finishSession()` derives `endTime` from `startTime + backfillDurationMinutes`.
 
 When finishing a session started from a template, `templateDiffersFromSession()` decides whether to prompt "update the routine?"; when finishing a blank session, the user is prompted to optionally save it as a new template. Both prompts reuse `App.showConfirm`/`App.showModalHtml`.
+
+### Coach mode (multi-profile)
+When `State.settings.coachMode` is on, a "學員" (students) tab appears and `records`/`bodyMetrics` become scoped to a profile. There is no `profiles` store — only real students live in the `students` IndexedDB store; the self profile is a synthetic, hardcoded `{id:'self', name:'我自己'}` prepended by `getAllProfiles()`. `State.currentProfileId` (persisted in `localStorage['ft_current_profile']`) is the single global "who" dimension:
+- Every record and bodyMetrics row carries `profileId`; `(row.profileId || 'self')` is the read pattern everywhere, so pre-coach-mode data with no `profileId` at all is automatically treated as the self profile — no migration needed.
+- `recordsForCurrentProfile()` / `bodyMetricsForCurrentProfile()` are the only functions that should read `State.records`/`State.bodyMetrics` for display (Home's stats, History, Stats tab, `lastRecordForExercise`'s "previous value" hint all go through them). Reading `State.records` directly bypasses the scoping and leaks data across profiles.
+- New records/bodyMetrics are tagged with `State.currentProfileId` at creation time (`App.finishSession`, `App.saveBodyMetric`). A session locks in whatever profile was selected when it started, since the profile selector (`renderProfileSelector()`, shown on Home/History/Stats when coach mode is on) is unreachable once a session is active (bottom nav is hidden).
+- Templates, exercises, and tags stay global/unscoped by design — only workout history and body metrics are per-profile.
+- Deleting a student (`App.deleteStudent`) cascade-deletes their records and bodyMetrics rather than leaving orphaned rows with no profile to view them under.
+- Turning coach mode off resets `State.currentProfileId` to `'self'` (`App.setCoachMode`), so the single-user experience is never left mid-scoped to a hidden student.
 
 ### Security
 User-supplied strings (exercise names, notes, tags, custom exercise descriptions, etc.) are rendered into `innerHTML` template strings — always pass them through `escapeHtml()` before interpolating. IDs (UUIDs from `uid()`) are safe to interpolate into inline `onclick="App.foo('${id}')"` strings unescaped since they never contain user input.

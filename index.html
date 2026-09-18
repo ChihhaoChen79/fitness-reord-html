@@ -82,7 +82,7 @@
 <body>
 <div id="app" class="max-w-lg mx-auto min-h-screen"></div>
 <nav id="bottomnav" class="fixed bottom-0 left-0 right-0 z-40" style="background:var(--card); border-top:1px solid var(--border);">
-  <div class="max-w-lg mx-auto grid grid-cols-6 text-center">
+  <div id="bottomnavGrid" class="max-w-lg mx-auto grid grid-cols-6 text-center">
     <button onclick="App.setTab('home')" data-navtab="home" class="navbtn py-2 flex flex-col items-center gap-0.5">
       <span class="text-lg">🏠</span><span class="text-2xs">首頁</span>
     </button>
@@ -91,6 +91,9 @@
     </button>
     <button onclick="App.setTab('templates')" data-navtab="templates" class="navbtn py-2 flex flex-col items-center gap-0.5">
       <span class="text-lg">📋</span><span class="text-2xs">菜單</span>
+    </button>
+    <button onclick="App.setTab('students')" data-navtab="students" class="navbtn py-2 flex flex-col items-center gap-0.5" style="display:none;">
+      <span class="text-lg">🧑‍🤝‍🧑</span><span class="text-2xs">學員</span>
     </button>
     <button onclick="App.setTab('history')" data-navtab="history" class="navbtn py-2 flex flex-col items-center gap-0.5">
       <span class="text-lg">🗂️</span><span class="text-2xs">紀錄</span>
@@ -228,8 +231,8 @@ function toStoreDistance(display){
 
 /* ============================== IndexedDB ============================== */
 const DB_NAME = 'fitnessTrackerDB';
-const DB_VERSION = 1;
-const STORES = ['exercises','templates','records','bodyMetrics','tags'];
+const DB_VERSION = 2;
+const STORES = ['exercises','templates','records','bodyMetrics','tags','students'];
 let dbInstance = null;
 
 function openDB(){
@@ -412,9 +415,9 @@ const DRAFT_KEY = 'ft_draft_session';
 function loadSettings(){
   try{
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return Object.assign({ unit:'metric', theme:'auto', language:'zh-TW' }, JSON.parse(raw));
+    if (raw) return Object.assign({ unit:'metric', theme:'auto', language:'zh-TW', coachMode:false }, JSON.parse(raw));
   }catch(e){}
-  return { unit:'metric', theme:'auto', language:'zh-TW' };
+  return { unit:'metric', theme:'auto', language:'zh-TW', coachMode:false };
 }
 function saveSettings(s){
   try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }catch(e){}
@@ -434,16 +437,21 @@ function loadDraft(){
   }catch(e){ return null; }
 }
 function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} }
+const CURRENT_PROFILE_KEY = 'ft_current_profile';
+function loadCurrentProfileId(){ try{ return localStorage.getItem(CURRENT_PROFILE_KEY) || 'self'; }catch(e){ return 'self'; } }
+function saveCurrentProfileId(id){ try{ localStorage.setItem(CURRENT_PROFILE_KEY, id); }catch(e){} }
 
 /* ============================== State ============================== */
 const State = {
   tab: 'home',
   settings: loadSettings(),
-  exercises: [], templates: [], tags: [], records: [], bodyMetrics: [],
+  exercises: [], templates: [], tags: [], records: [], bodyMetrics: [], students: [],
+  currentProfileId: loadCurrentProfileId(),
   exercisesView: { category:'全部', equipment:'全部', search:'', viewMode:'all', subview:'list', editId:null },
   templatesView: { subview:'list', editId:null, draft:null },
   historyView: { subview:'list', openId:null, editBuffer:null },
   statsView: { range:'all', exerciseId:null, volumeScope:'exercise' },
+  studentsView: { subview:'list', editId:null },
   session: null,
   sessionTimerHandle: null,
   pendingExercisePicker: null, // callback for picker modal
@@ -504,18 +512,53 @@ App.init = async function(){
 };
 
 App.reloadAll = async function(){
-  const [exercises, templates, tags, records, bodyMetrics] = await Promise.all([
-    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('tags'), dbGetAll('records'), dbGetAll('bodyMetrics')
+  const [exercises, templates, tags, records, bodyMetrics, students] = await Promise.all([
+    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('tags'), dbGetAll('records'), dbGetAll('bodyMetrics'), dbGetAll('students')
   ]);
   State.exercises = exercises.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
   State.templates = templates.sort((a,b)=> new Date(b.updatedAt)-new Date(a.updatedAt));
   State.tags = tags;
   State.records = records.sort((a,b)=> new Date(b.startTime)-new Date(a.startTime));
   State.bodyMetrics = bodyMetrics.sort((a,b)=> new Date(b.recordedAt)-new Date(a.recordedAt));
+  State.students = students.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
+  if (!getAllProfiles().some(p => p.id === State.currentProfileId)){
+    State.currentProfileId = 'self';
+    saveCurrentProfileId('self');
+  }
 };
+
+function renderProfileSelector(){
+  if (!State.settings.coachMode) return '';
+  const profiles = getAllProfiles();
+  return `
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-xs shrink-0" style="color:var(--text2)">目前對象</span>
+      <select class="input" onchange="App.setCurrentProfile(this.value)">
+        ${profiles.map(p => `<option value="${p.id}" ${State.currentProfileId===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
 
 function exerciseById(id){ return State.exercises.find(e=>e.id===id); }
 function templateById(id){ return State.templates.find(t=>t.id===id); }
+
+/* ---- 教練模式：對象（自己／學員） ---- */
+function getAllProfiles(){
+  return [{ id:'self', name:'我自己', isSelf:true }, ...State.students.map(s => ({ ...s, isSelf:false }))];
+}
+function profileById(id){ return getAllProfiles().find(p => p.id === id) || getAllProfiles()[0]; }
+function recordsForCurrentProfile(){
+  return State.records.filter(r => (r.profileId || 'self') === State.currentProfileId);
+}
+function bodyMetricsForCurrentProfile(){
+  return State.bodyMetrics.filter(m => (m.profileId || 'self') === State.currentProfileId);
+}
+App.setCurrentProfile = function(id){
+  State.currentProfileId = id;
+  saveCurrentProfileId(id);
+  App.render();
+};
 
 /* ============================== Toast / Modal helpers ============================== */
 App.toast = function(msg, ms){
@@ -559,6 +602,11 @@ App.setTab = function(tab){
 
 /* ============================== Render root ============================== */
 App.render = function(){
+  const studentsBtn = document.querySelector('[data-navtab="students"]');
+  if (studentsBtn) studentsBtn.style.display = State.settings.coachMode ? '' : 'none';
+  const navGrid = document.getElementById('bottomnavGrid');
+  if (navGrid) navGrid.style.gridTemplateColumns = `repeat(${State.settings.coachMode ? 7 : 6}, minmax(0,1fr))`;
+
   document.querySelectorAll('.navbtn').forEach(b=>{
     const active = b.dataset.navtab === State.tab && !State.session;
     b.style.color = active ? 'var(--primary)' : 'var(--text2)';
@@ -574,6 +622,7 @@ App.render = function(){
     case 'home': html = renderHome(); break;
     case 'exercises': html = renderExercisesTab(); break;
     case 'templates': html = renderTemplatesTab(); break;
+    case 'students': html = renderStudentsTab(); break;
     case 'history': html = renderHistoryTab(); break;
     case 'stats': html = renderStatsTab(); break;
     case 'settings': html = renderSettingsTab(); break;
@@ -596,7 +645,7 @@ function pageWrap(title, right, body){
 
 /* ============================== HOME ============================== */
 function computeStreakDays(){
-  const days = new Set(State.records.map(r => dateKey(r.startTime)));
+  const days = new Set(recordsForCurrentProfile().map(r => dateKey(r.startTime)));
   let streak = 0;
   let cursor = new Date();
   if (!days.has(dateKey(cursor))){
@@ -610,7 +659,7 @@ function computeStreakDays(){
 }
 function countThisMonth(){
   const mk = monthKey(new Date());
-  return State.records.filter(r => monthKey(r.startTime) === mk).length;
+  return recordsForCurrentProfile().filter(r => monthKey(r.startTime) === mk).length;
 }
 function pickMotivation(){
   const count = countThisMonth();
@@ -622,7 +671,7 @@ function pickMotivation(){
 }
 
 function renderHome(){
-  const recent = State.records.slice(0,3);
+  const recent = recordsForCurrentProfile().slice(0,3);
   const streak = computeStreakDays();
   const monthCount = countThisMonth();
   const quote = pickMotivation();
@@ -645,6 +694,7 @@ function renderHome(){
   `).join('') || `<div class="text-sm text-center py-4" style="color:var(--text2)">還沒有任何訓練紀錄</div>`;
 
   return pageWrap('首頁', '', `
+    ${renderProfileSelector()}
     <div class="card p-4 mb-4" style="background:linear-gradient(135deg,var(--primary),#8b5cf6); color:#fff; border:none;">
       <div class="text-sm opacity-90 mb-1">今日狀態</div>
       <div class="text-lg font-bold mb-3">${escapeHtml(quote)}</div>
@@ -1165,6 +1215,99 @@ App.importSharedTemplate = async function(payload){
   App.toast(`已匯入菜單「${payload.name}」`);
 };
 
+/* ============================== STUDENTS TAB (學員，教練模式) ============================== */
+function renderStudentsTab(){
+  const v = State.studentsView;
+  if (v.subview === 'form') return renderStudentForm(v.editId);
+
+  const items = State.students.map(p => `
+    <div class="card p-3 mb-2" onclick="App.editStudent('${p.id}')">
+      <div class="font-bold text-sm">${escapeHtml(p.name)}</div>
+      <div class="text-xs mt-0.5" style="color:var(--text2)">${p.height?`身高 ${p.height}cm`:''}${p.height&&p.notes?' · ':''}${p.notes?escapeHtml(p.notes):''}</div>
+    </div>
+  `).join('') || `<div class="text-sm text-center py-8" style="color:var(--text2)">尚未新增學員</div>`;
+
+  return pageWrap('學員', `<button class="btn btn-primary" style="padding:8px 14px;" onclick="App.newStudent()">+ 新增學員</button>`, `
+    <div class="card p-3 mb-2">
+      <div class="font-bold text-sm">我自己</div>
+      <div class="text-xs mt-0.5" style="color:var(--text2)">預設對象，無法刪除</div>
+    </div>
+    ${items}
+  `);
+}
+App.newStudent = function(){
+  State.studentsView = { subview:'form', editId:null };
+  App.render();
+};
+App.editStudent = function(id){
+  State.studentsView = { subview:'form', editId:id };
+  App.render();
+};
+App.backToStudentList = function(){
+  State.studentsView = { subview:'list', editId:null };
+  App.render();
+};
+function renderStudentForm(id){
+  const editing = id ? State.students.find(s=>s.id===id) : null;
+  const p = editing || { name:'', height:'', notes:'' };
+  return pageWrap(editing ? '編輯學員' : '新增學員', `<button class="btn-ghost text-sm" onclick="App.backToStudentList()">取消</button>`, `
+    <div class="space-y-3">
+      <div><label class="text-xs" style="color:var(--text2)">姓名</label><input id="stuName" class="input mt-1" value="${escapeHtml(p.name)}"></div>
+      <div><label class="text-xs" style="color:var(--text2)">身高 (cm，選填)</label><input id="stuHeight" type="number" step="0.1" class="input mt-1" value="${p.height||''}"></div>
+      ${!editing ? `
+      <div class="flex gap-2">
+        <div class="flex-1"><label class="text-xs" style="color:var(--text2)">體重 (${weightLabel()}，選填)</label><input id="stuWeight" type="number" step="0.1" class="input mt-1"></div>
+        <div class="flex-1"><label class="text-xs" style="color:var(--text2)">體脂 %（選填）</label><input id="stuFat" type="number" step="0.1" class="input mt-1"></div>
+      </div>
+      <div class="text-xs" style="color:var(--text2)">之後的體重/體脂紀錄，切到這位學員後可以在「統計」頁繼續新增。</div>
+      ` : ''}
+      <div><label class="text-xs" style="color:var(--text2)">備註（選填）</label><textarea id="stuNotes" class="input mt-1" rows="2">${escapeHtml(p.notes||'')}</textarea></div>
+      <button class="btn btn-primary w-full mt-2" onclick="App.saveStudent(${editing ? `'${editing.id}'` : 'null'})">儲存</button>
+      ${editing ? `<button class="btn btn-danger w-full mt-2" onclick="App.deleteStudent('${editing.id}')">刪除學員</button>` : ''}
+    </div>
+  `);
+}
+App.saveStudent = async function(id){
+  const name = document.getElementById('stuName').value.trim();
+  if (!name){ App.toast('請輸入姓名'); return; }
+  const heightVal = document.getElementById('stuHeight').value;
+  const notes = document.getElementById('stuNotes').value.trim();
+  const existing = id ? State.students.find(s=>s.id===id) : null;
+  const student = {
+    id: id || uid(), name,
+    height: heightVal ? parseFloat(heightVal) : undefined,
+    notes, createdAt: existing ? existing.createdAt : nowISO(),
+  };
+  await dbPut('students', student);
+  if (!id){
+    const weightEl = document.getElementById('stuWeight');
+    const fatEl = document.getElementById('stuFat');
+    if (weightEl && weightEl.value){
+      await dbPut('bodyMetrics', {
+        id: uid(), profileId: student.id, recordedAt: nowISO(),
+        weight: toStoreWeight(weightEl.value),
+        bodyFat: fatEl && fatEl.value ? parseFloat(fatEl.value) : undefined,
+      });
+    }
+  }
+  await App.reloadAll();
+  App.toast('已儲存學員');
+  App.backToStudentList();
+};
+App.deleteStudent = async function(id){
+  const ok = await App.showConfirm('確定要刪除這位學員嗎？他的所有訓練紀錄與身體指標也會一併刪除，且無法復原。', '刪除學員', '刪除', '取消');
+  if (!ok) return;
+  await dbDelete('students', id);
+  const recs = State.records.filter(r => r.profileId === id);
+  for (const r of recs) await dbDelete('records', r.id);
+  const bms = State.bodyMetrics.filter(m => m.profileId === id);
+  for (const m of bms) await dbDelete('bodyMetrics', m.id);
+  if (State.currentProfileId === id) App.setCurrentProfile('self');
+  await App.reloadAll();
+  App.toast('已刪除學員');
+  App.backToStudentList();
+};
+
 /* ============================== 訓練 SESSION ============================== */
 function snapshotSetsFromTemplateExercise(te){
   return te.plannedSets.map(s => ({ setNumber:s.setNumber, weight:s.weight, distance:s.distance, reps:s.reps, completed:false }));
@@ -1320,7 +1463,7 @@ function attachSessionTimerDisplay(){
 const persistDraft = debounce(()=>{ if (State.session) saveDraft(State.session); }, 400);
 
 function lastRecordForExercise(exerciseId){
-  const recs = State.records.filter(r => r.exercises.some(e=>e.exerciseId===exerciseId));
+  const recs = recordsForCurrentProfile().filter(r => r.exercises.some(e=>e.exerciseId===exerciseId));
   if (!recs.length) return null;
   return recs[0].exercises.find(e=>e.exerciseId===exerciseId);
 }
@@ -1385,6 +1528,7 @@ function renderSession(){
         <button class="btn btn-primary" style="padding:6px 14px;" onclick="App.finishSession()">完成</button>
       </div>
       <h1 class="text-xl font-extrabold">${escapeHtml(s.templateNameSnapshot || '空白訓練')}</h1>
+      ${State.settings.coachMode ? `<div class="text-xs mt-1" style="color:var(--text2)">訓練對象：${escapeHtml(profileById(State.currentProfileId).name)}</div>` : ''}
       ${backfillBar}
     </div>
     <div class="px-4 pb-24">
@@ -1502,6 +1646,7 @@ App.finishSession = async function(){
 
   const record = {
     id: uid(), date: dateKey(s.startTime), startTime: s.startTime, endTime, duration,
+    profileId: State.currentProfileId,
     templateId: s.templateId || undefined, templateNameSnapshot: s.templateNameSnapshot || undefined,
     tags: s.tags, exercises: s.exercises.map(se => ({
       exerciseId: se.exerciseId, exerciseNameSnapshot: se.exerciseNameSnapshot, order: se.order,
@@ -1564,12 +1709,13 @@ function renderHistoryTab(){
   if (v.subview === 'detail') return renderHistoryDetail(v.openId);
 
   const backfillBtn = `<button class="btn btn-primary" style="padding:8px 14px;" onclick="App.openBackfillModal()">+ 補記錄</button>`;
+  const records = recordsForCurrentProfile();
 
-  if (!State.records.length){
-    return pageWrap('訓練紀錄', backfillBtn, `<div class="text-sm text-center py-8" style="color:var(--text2)">還沒有任何訓練紀錄</div>`);
+  if (!records.length){
+    return pageWrap('訓練紀錄', backfillBtn, `${renderProfileSelector()}<div class="text-sm text-center py-8" style="color:var(--text2)">還沒有任何訓練紀錄</div>`);
   }
   const groups = {};
-  State.records.forEach(r => {
+  records.forEach(r => {
     const mk = monthKey(r.startTime);
     (groups[mk] = groups[mk] || []).push(r);
   });
@@ -1590,7 +1736,7 @@ function renderHistoryTab(){
     return `<div class="text-xs font-bold mt-3 mb-1" style="color:var(--text2)">${y}年${parseInt(m)}月</div>${items}`;
   }).join('');
 
-  return pageWrap('訓練紀錄', backfillBtn, html);
+  return pageWrap('訓練紀錄', backfillBtn, renderProfileSelector() + html);
 }
 App.openHistoryDetail = function(id){
   State.historyView.subview = 'detail';
@@ -1674,9 +1820,10 @@ function rangeStartDate(range){
   return null;
 }
 function recordsInRange(range){
+  const base = recordsForCurrentProfile();
   const start = rangeStartDate(range);
-  if (!start) return State.records;
-  return State.records.filter(r => new Date(r.startTime) >= start);
+  if (!start) return base;
+  return base.filter(r => new Date(r.startTime) >= start);
 }
 
 function renderStatsTab(){
@@ -1688,6 +1835,7 @@ function renderStatsTab(){
   const monthReview = renderMonthlyReview();
 
   return pageWrap('統計', '', `
+    ${renderProfileSelector()}
     <div class="flex gap-2 overflow-x-auto no-scrollbar mb-4 pb-1">${rangeChips}</div>
 
     ${monthReview}
@@ -1735,8 +1883,9 @@ function renderMonthlyReview(){
   const thisMK = monthKey(now);
   const lastDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
   const lastMK = monthKey(lastDate);
-  const thisRecs = State.records.filter(r=>monthKey(r.startTime)===thisMK);
-  const lastRecs = State.records.filter(r=>monthKey(r.startTime)===lastMK);
+  const scoped = recordsForCurrentProfile();
+  const thisRecs = scoped.filter(r=>monthKey(r.startTime)===thisMK);
+  const lastRecs = scoped.filter(r=>monthKey(r.startTime)===lastMK);
   const vol = recs => recs.reduce((sum,r)=>sum + r.exercises.reduce((s,e)=>s+e.sets.reduce((s2,st)=>s2+(st.completed&&st.weight?st.weight*st.reps:0),0),0),0);
   const thisVol = vol(thisRecs), lastVol = vol(lastRecs);
   const diff = lastVol>0 ? Math.round(((thisVol-lastVol)/lastVol)*100) : (thisVol>0?100:0);
@@ -1758,8 +1907,9 @@ function renderMonthlyReview(){
 }
 
 function renderBodyMetricList(){
-  if (!State.bodyMetrics.length) return `<div class="text-sm text-center py-4" style="color:var(--text2)">尚無體重/體脂紀錄</div>`;
-  const items = State.bodyMetrics.slice(0,10).map(m => `
+  const scoped = bodyMetricsForCurrentProfile();
+  if (!scoped.length) return `<div class="text-sm text-center py-4" style="color:var(--text2)">尚無體重/體脂紀錄</div>`;
+  const items = scoped.slice(0,10).map(m => `
     <div class="card p-3 mb-2 flex justify-between items-center">
       <div>
         <div class="font-bold text-sm">${toDisplayWeight(m.weight)} ${weightLabel()}${m.bodyFat!==undefined&&m.bodyFat!==null?` · 體脂 ${m.bodyFat}%`:''}</div>
@@ -1786,7 +1936,7 @@ App.saveBodyMetric = async function(){
   if (!weightVal){ App.toast('請輸入體重'); return; }
   const fatVal = document.getElementById('bmFat').value;
   const obj = {
-    id: uid(), recordedAt: nowISO(),
+    id: uid(), recordedAt: nowISO(), profileId: State.currentProfileId,
     weight: toStoreWeight(weightVal),
     bodyFat: fatVal ? parseFloat(fatVal) : undefined,
     notes: document.getElementById('bmNotes').value.trim()
@@ -1863,7 +2013,7 @@ App.initStatsCharts = function(){
   });
 
   // 體重/體脂
-  const bms = [...State.bodyMetrics].sort((a,b)=>new Date(a.recordedAt)-new Date(b.recordedAt));
+  const bms = bodyMetricsForCurrentProfile().sort((a,b)=>new Date(a.recordedAt)-new Date(b.recordedAt));
   chartInstances.body = new Chart(document.getElementById('chartBody'), {
     type: 'line',
     data: { labels: bms.map(m=>fmtDateShort(m.recordedAt)), datasets: [
@@ -1904,6 +2054,15 @@ function renderSettingsTab(){
     </div>
 
     <div class="card p-4 mb-4">
+      <div class="font-bold text-sm mb-3">教練模式</div>
+      <div class="text-xs mb-3" style="color:var(--text2)">開啟後會多一個「學員」分頁可以新增學員資料，並可以在「紀錄」「統計」頁切換要查看或記錄的對象。</div>
+      <div class="flex gap-2">
+        <button class="btn ${!s.coachMode?'btn-primary':'btn-secondary'} flex-1" onclick="App.setCoachMode(false)">關閉</button>
+        <button class="btn ${s.coachMode?'btn-primary':'btn-secondary'} flex-1" onclick="App.setCoachMode(true)">開啟</button>
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
       <div class="font-bold text-sm mb-3">自訂標籤</div>
       <div class="flex gap-2 flex-wrap mb-3">
         ${State.tags.map(t=>`<span class="chip flex items-center gap-1">${escapeHtml(t.name)} <button onclick="App.deleteTag('${t.id}')" style="color:var(--danger)">✕</button></span>`).join('') || '<span class="text-sm" style="color:var(--text2)">尚無標籤</span>'}
@@ -1934,6 +2093,12 @@ function renderSettingsTab(){
   `);
 }
 App.setUnit = function(u){ State.settings.unit = u; saveSettings(State.settings); App.render(); };
+App.setCoachMode = function(on){
+  State.settings.coachMode = on;
+  saveSettings(State.settings);
+  if (!on) App.setCurrentProfile('self');
+  App.render();
+};
 App.setTheme = function(t){ State.settings.theme = t; saveSettings(State.settings); applyTheme(t); App.render(); };
 App.openUsageGuide = function(){
   App.showModalHtml(`
@@ -1985,13 +2150,13 @@ App.deleteTag = async function(id){
 };
 
 App.exportData = async function(){
-  const [exercises, templates, records, bodyMetrics, tags] = await Promise.all([
-    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('records'), dbGetAll('bodyMetrics'), dbGetAll('tags')
+  const [exercises, templates, records, bodyMetrics, tags, students] = await Promise.all([
+    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('records'), dbGetAll('bodyMetrics'), dbGetAll('tags'), dbGetAll('students')
   ]);
   const payload = {
     exportedAt: nowISO(), version: 1,
     settings: State.settings,
-    exercises, templates, records, bodyMetrics, tags
+    exercises, templates, records, bodyMetrics, tags, students
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2020,6 +2185,7 @@ App.importData = function(event){
       if (Array.isArray(data.records)) await dbBulkPut('records', data.records);
       if (Array.isArray(data.bodyMetrics)) await dbBulkPut('bodyMetrics', data.bodyMetrics);
       if (Array.isArray(data.tags)) await dbBulkPut('tags', data.tags);
+      if (Array.isArray(data.students)) await dbBulkPut('students', data.students);
       if (data.settings){ State.settings = Object.assign(loadSettings(), data.settings); saveSettings(State.settings); applyTheme(State.settings.theme); }
       await seedIfEmpty();
       await App.reloadAll();
