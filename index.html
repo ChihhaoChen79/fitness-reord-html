@@ -1105,7 +1105,10 @@ function renderTemplateForm(){
       <div class="card p-3 mb-3">
         <div class="flex justify-between items-center mb-2">
           <div class="font-bold text-sm">${escapeHtml(ex.name)}</div>
-          <button class="text-xs" style="color:var(--danger)" onclick="App.tplRemoveExercise(${idx})">移除</button>
+          <div class="flex gap-2">
+            <button class="text-xs" style="color:var(--primary)" onclick="App.tplReplaceExercise(${idx})">替換</button>
+            <button class="text-xs" style="color:var(--danger)" onclick="App.tplRemoveExercise(${idx})">移除</button>
+          </div>
         </div>
         ${ex.supportsUnilateral ? `
           <select class="input mb-2" onchange="App.tplUpdateVariant(${idx}, this.value)">
@@ -1139,7 +1142,19 @@ App.tplAddExercise = function(){
     App.render();
   });
 };
-App.tplRemoveExercise = function(idx){
+App.tplReplaceExercise = function(idx){
+  App.openExercisePicker((exId) => {
+    const ex = exerciseById(exId);
+    const te = State.templatesView.draft.exercises[idx];
+    te.exerciseId = exId;
+    te.variant = ex.supportsUnilateral ? '雙手' : undefined;
+    te.plannedSets.forEach(s => { s.weight = undefined; s.distance = undefined; });
+    App.render();
+  });
+};
+App.tplRemoveExercise = async function(idx){
+  const ok = await App.showConfirm('確定要移除這個動作嗎？已設定的組數也會一併刪除。', '移除動作', '移除', '取消');
+  if (!ok) return;
   State.templatesView.draft.exercises.splice(idx,1);
   State.templatesView.draft.exercises.forEach((e,i)=>e.order=i);
   App.render();
@@ -1149,7 +1164,9 @@ App.tplAddSet = function(idx){
   sets.push(emptySet(sets.length+1));
   App.render();
 };
-App.tplRemoveSet = function(idx, si){
+App.tplRemoveSet = async function(idx, si){
+  const ok = await App.showConfirm('確定要刪除這一組嗎？', '刪除組數', '刪除', '取消');
+  if (!ok) return;
   const sets = State.templatesView.draft.exercises[idx].plannedSets;
   sets.splice(si,1);
   sets.forEach((s,i)=>s.setNumber=i+1);
@@ -1543,7 +1560,10 @@ function renderSession(){
       <div class="card p-3 mb-3">
         <div class="flex justify-between items-center mb-2">
           <div class="font-bold text-sm">${escapeHtml(se.exerciseNameSnapshot)}</div>
-          <button class="text-xs" style="color:var(--danger)" onclick="App.sessRemoveExercise(${idx})">移除</button>
+          <div class="flex gap-2">
+            <button class="text-xs" style="color:var(--primary)" onclick="App.sessReplaceExercise(${idx})">替換</button>
+            <button class="text-xs" style="color:var(--danger)" onclick="App.sessRemoveExercise(${idx})">移除</button>
+          </div>
         </div>
         ${ex && ex.supportsUnilateral ? `
           <select class="input mb-2" onchange="App.sessUpdateVariant(${idx}, this.value)">
@@ -1605,7 +1625,21 @@ App.sessAddExercise = function(){
     persistDraft(); App.render();
   });
 };
-App.sessRemoveExercise = function(idx){
+App.sessReplaceExercise = function(idx){
+  App.openExercisePicker((exId) => {
+    const ex = exerciseById(exId);
+    const se = State.session.exercises[idx];
+    se.exerciseId = exId;
+    se.exerciseNameSnapshot = ex.name;
+    se.trackingType = ex.trackingType;
+    se.variant = ex.supportsUnilateral ? '雙手' : undefined;
+    se.sets.forEach(st => { st.weight = undefined; st.distance = undefined; });
+    persistDraft(); App.render();
+  });
+};
+App.sessRemoveExercise = async function(idx){
+  const ok = await App.showConfirm('確定要移除這個動作嗎？已輸入的組數資料也會一併刪除。', '移除動作', '移除', '取消');
+  if (!ok) return;
   State.session.exercises.splice(idx,1);
   State.session.exercises.forEach((e,i)=>e.order=i);
   persistDraft(); App.render();
@@ -1616,7 +1650,9 @@ App.sessAddSet = function(idx){
   sets.push({ setNumber: sets.length+1, weight: last?.weight, distance: last?.distance, reps: last?.reps||0, completed:false });
   persistDraft(); App.render();
 };
-App.sessRemoveSet = function(idx, si){
+App.sessRemoveSet = async function(idx, si){
+  const ok = await App.showConfirm('確定要刪除這一組嗎？', '刪除組數', '刪除', '取消');
+  if (!ok) return;
   const sets = State.session.exercises[idx].sets;
   sets.splice(si,1);
   sets.forEach((s,i)=>s.setNumber=i+1);
