@@ -230,6 +230,51 @@ function toStoreDistance(display){
   return unit()==='imperial' ? n * KM_PER_MI : n;
 }
 
+/* ---- 記錄方式：不同動作類型需要不同的欄位組合 ---- */
+const TRACKING_TYPES = [
+  { value:'weight_reps', label:'重量 × 次數' },
+  { value:'distance_reps', label:'距離(公里/英里) × 時間(分)' },
+  { value:'distance_m_reps', label:'距離(公尺) × 時間(秒)' },
+  { value:'reps_only', label:'純次數（無重量/距離）' },
+];
+function trackingTypeOptions(selected){
+  return TRACKING_TYPES.map(t => `<option value="${t.value}" ${selected===t.value?'selected':''}>${t.label}</option>`).join('');
+}
+function renderTrackingInputs(trackingType, st, updateFn, idx, si){
+  if (trackingType === 'reps_only'){
+    return `<input class="input" type="number" placeholder="次數" value="${st.reps||''}" oninput="${updateFn}(${idx},${si},'reps',this.value)">`;
+  }
+  if (trackingType === 'distance_m_reps'){
+    return `
+      <input class="input" type="number" step="1" placeholder="公尺" value="${st.distance!==undefined?st.distance:''}" oninput="${updateFn}(${idx},${si},'distanceMeters',this.value)">
+      <input class="input" type="number" placeholder="秒" value="${st.reps||''}" oninput="${updateFn}(${idx},${si},'reps',this.value)">
+    `;
+  }
+  if (trackingType === 'distance_reps'){
+    return `
+      <input class="input" type="number" step="0.01" placeholder="${distanceLabel()}" value="${st.distance!==undefined?toDisplayDistance(st.distance):''}" oninput="${updateFn}(${idx},${si},'distance',this.value)">
+      <input class="input" type="number" placeholder="時間(分)" value="${st.reps||''}" oninput="${updateFn}(${idx},${si},'reps',this.value)">
+    `;
+  }
+  return `
+    <input class="input" type="number" step="0.5" placeholder="${weightLabel()}" value="${st.weight!==undefined?toDisplayWeight(st.weight):''}" oninput="${updateFn}(${idx},${si},'weight',this.value)">
+    <input class="input" type="number" placeholder="次數" value="${st.reps||''}" oninput="${updateFn}(${idx},${si},'reps',this.value)">
+  `;
+}
+function applySetFieldUpdate(set, field, val){
+  if (field==='weight') set.weight = toStoreWeight(val);
+  else if (field==='distance') set.distance = toStoreDistance(val);
+  else if (field==='distanceMeters') set.distance = (val===''||val===undefined) ? undefined : (parseFloat(val)||0);
+  else set.reps = parseInt(val)||0;
+}
+function formatSetSummary(trackingType, set){
+  if (!set) return '-';
+  if (trackingType === 'reps_only') return `${set.reps||'-'} 次`;
+  if (trackingType === 'distance_m_reps') return `${set.distance!==undefined?set.distance:'-'}公尺 / ${set.reps||'-'}秒`;
+  if (trackingType === 'distance_reps') return `${toDisplayDistance(set.distance)||'-'}${distanceLabel()} / ${set.reps||'-'}分`;
+  return `${toDisplayWeight(set.weight)||'-'}${weightLabel()} x ${set.reps||'-'}`;
+}
+
 /* ============================== IndexedDB ============================== */
 const DB_NAME = 'fitnessTrackerDB';
 const DB_VERSION = 2;
@@ -322,7 +367,7 @@ function seedExercise(name, category, equipment, muscleGroups, uni, trackingType
   };
 }
 function buildSeedExercises(){
-  const W = 'weight_reps', D = 'distance_reps';
+  const W = 'weight_reps', D = 'distance_reps', M = 'distance_m_reps', R = 'reps_only';
   return [
     seedExercise('槓鈴臥推','胸','槓鈴',['胸大肌','三頭肌','前三角肌'],false,W),
     seedExercise('上斜槓鈴臥推','胸','槓鈴',['胸大肌上部','前三角肌'],false,W),
@@ -390,11 +435,11 @@ function buildSeedExercises(){
     seedExercise('壺鈴土耳其起立','核心','壺鈴',['核心整體','肩部穩定'],true,W),
 
     seedExercise('跑步機慢跑','有氧','跑步機',['心肺','腿部'],false,D),
-    seedExercise('跑步機衝刺','有氧','跑步機',['心肺','腿部'],false,D),
+    seedExercise('跑步機衝刺','有氧','跑步機',['心肺','腿部'],false,M),
     seedExercise('飛輪','有氧','飛輪車',['心肺','股四頭肌'],false,D),
     seedExercise('划船機','有氧','划船機',['心肺','全身'],false,D),
     seedExercise('登階機','有氧','登階機',['心肺','臀腿'],false,D),
-    seedExercise('跳繩','有氧','自身體重',['心肺','小腿'],false,D),
+    seedExercise('跳繩','有氧','自身體重',['心肺','小腿'],false,R),
     seedExercise('戶外跑步','有氧','無',['心肺','腿部'],false,D),
     seedExercise('戶外騎車','有氧','無',['心肺','腿部'],false,D),
   ];
@@ -822,10 +867,7 @@ function renderExerciseForm(id){
         <input id="exMuscles" class="input mt-1" value="${escapeHtml(e.muscleGroups.join('、'))}" placeholder="例如：胸大肌、三頭肌">
       </div>
       <div><label class="text-xs" style="color:var(--text2)">記錄方式</label>
-        <select id="exTracking" class="input mt-1">
-          <option value="weight_reps" ${e.trackingType==='weight_reps'?'selected':''}>重量 × 次數</option>
-          <option value="distance_reps" ${e.trackingType==='distance_reps'?'selected':''}>距離 × 時間（有氧）</option>
-        </select>
+        <select id="exTracking" class="input mt-1">${trackingTypeOptions(e.trackingType)}</select>
       </div>
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="exUni" ${e.supportsUnilateral?'checked':''}> 支援單手/雙手變化</label>
       <div><label class="text-xs" style="color:var(--text2)">圖片網址（選填）</label><input id="exImage" class="input mt-1" value="${escapeHtml(e.imageUrl)}" placeholder="https://..."></div>
@@ -999,10 +1041,7 @@ App.openQuickAddExercise = function(){
       </div>
       <div><label class="text-xs" style="color:var(--text2)">主要肌群（用頓號分隔，選填）</label><input id="qaMuscles" class="input mt-1" placeholder="例如：胸大肌、三頭肌"></div>
       <div><label class="text-xs" style="color:var(--text2)">記錄方式</label>
-        <select id="qaTracking" class="input mt-1">
-          <option value="weight_reps">重量 × 次數</option>
-          <option value="distance_reps">距離 × 時間（有氧）</option>
-        </select>
+        <select id="qaTracking" class="input mt-1">${trackingTypeOptions('weight_reps')}</select>
       </div>
       <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="qaUni"> 支援單手/雙手變化</label>
       <button class="btn btn-primary w-full" onclick="App.quickAddExercise()">新增並加入</button>
@@ -1089,15 +1128,10 @@ function renderTemplateForm(){
   const exHtml = d.exercises.map((te, idx) => {
     const ex = exerciseById(te.exerciseId);
     if (!ex) return '';
-    const isDistance = ex.trackingType === 'distance_reps';
     const setsHtml = te.plannedSets.map((s, si) => `
       <div class="flex items-center gap-2 mb-1 set-row">
         <span class="w-5 text-xs text-center" style="color:var(--text2)">${s.setNumber}</span>
-        ${isDistance
-          ? `<input class="input" type="number" step="0.01" placeholder="${distanceLabel()}" value="${s.distance!==undefined?toDisplayDistance(s.distance):''}" oninput="App.tplUpdateSet(${idx},${si},'distance',this.value)">`
-          : `<input class="input" type="number" step="0.5" placeholder="${weightLabel()}" value="${s.weight!==undefined?toDisplayWeight(s.weight):''}" oninput="App.tplUpdateSet(${idx},${si},'weight',this.value)">`
-        }
-        <input class="input" type="number" placeholder="${isDistance?'時間(分)':'次數'}" value="${s.reps||''}" oninput="App.tplUpdateSet(${idx},${si},'reps',this.value)">
+        ${renderTrackingInputs(ex.trackingType, s, 'App.tplUpdateSet', idx, si)}
         <button class="text-xs px-2" style="color:var(--danger)" onclick="App.tplRemoveSet(${idx},${si})">✕</button>
       </div>
     `).join('');
@@ -1174,9 +1208,7 @@ App.tplRemoveSet = async function(idx, si){
 };
 App.tplUpdateSet = function(idx, si, field, val){
   const s = State.templatesView.draft.exercises[idx].plannedSets[si];
-  if (field==='weight') s.weight = toStoreWeight(val);
-  else if (field==='distance') s.distance = toStoreDistance(val);
-  else s.reps = parseInt(val)||0;
+  applySetFieldUpdate(s, field, val);
 };
 App.tplUpdateVariant = function(idx, val){ State.templatesView.draft.exercises[idx].variant = val || undefined; };
 App.tplUpdateNotes = function(idx, val){ State.templatesView.draft.exercises[idx].notes = val; };
@@ -1538,20 +1570,15 @@ function renderSession(){
 
   const exHtml = s.exercises.map((se, idx) => {
     const ex = exerciseById(se.exerciseId);
-    const isDistance = se.trackingType === 'distance_reps';
     const prev = lastRecordForExercise(se.exerciseId);
     const setsHtml = se.sets.map((st, si) => {
       const prevSet = prev && prev.sets[si];
-      const prevLabel = prevSet ? (isDistance ? `${toDisplayDistance(prevSet.distance)||'-'}${distanceLabel()} / ${prevSet.reps||'-'}分` : `${toDisplayWeight(prevSet.weight)||'-'}${weightLabel()} x ${prevSet.reps||'-'}`) : '-';
+      const prevLabel = formatSetSummary(se.trackingType, prevSet);
       return `
       <div class="flex items-center gap-2 mb-1.5 set-row">
         <span class="w-5 text-xs text-center" style="color:var(--text2)">${st.setNumber}</span>
         <span class="text-2xs w-14 shrink-0 truncate" style="color:var(--text2)" title="上次紀錄：${prevLabel}">${prevLabel}</span>
-        ${isDistance
-          ? `<input class="input" type="number" step="0.01" placeholder="${distanceLabel()}" value="${st.distance!==undefined?toDisplayDistance(st.distance):''}" oninput="App.sessUpdateSet(${idx},${si},'distance',this.value)">`
-          : `<input class="input" type="number" step="0.5" placeholder="${weightLabel()}" value="${st.weight!==undefined?toDisplayWeight(st.weight):''}" oninput="App.sessUpdateSet(${idx},${si},'weight',this.value)">`
-        }
-        <input class="input" type="number" placeholder="${isDistance?'時間(分)':'次數'}" value="${st.reps||''}" oninput="App.sessUpdateSet(${idx},${si},'reps',this.value)">
+        ${renderTrackingInputs(se.trackingType, st, 'App.sessUpdateSet', idx, si)}
         <button onclick="App.sessToggleComplete(${idx},${si})" class="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center" style="background:${st.completed?'var(--primary)':'var(--input-bg)'}; border:1px solid var(--border); color:${st.completed?'#fff':'var(--text2)'}">✓</button>
         <button class="text-xs px-2 shrink-0" style="color:var(--danger)" onclick="App.sessRemoveSet(${idx},${si})">✕</button>
       </div>`;
@@ -1660,9 +1687,7 @@ App.sessRemoveSet = async function(idx, si){
 };
 App.sessUpdateSet = function(idx, si, field, val){
   const s = State.session.exercises[idx].sets[si];
-  if (field==='weight') s.weight = toStoreWeight(val);
-  else if (field==='distance') s.distance = toStoreDistance(val);
-  else s.reps = parseInt(val)||0;
+  applySetFieldUpdate(s, field, val);
   persistDraft();
 };
 App.sessToggleComplete = function(idx, si){
@@ -1740,7 +1765,7 @@ App.finishSession = async function(){
     templateId: s.templateId || undefined, templateNameSnapshot: s.templateNameSnapshot || undefined,
     tags: s.tags, exercises: s.exercises.map(se => ({
       exerciseId: se.exerciseId, exerciseNameSnapshot: se.exerciseNameSnapshot, order: se.order,
-      variant: se.variant, sets: se.sets, notes: se.notes
+      variant: se.variant, sets: se.sets, notes: se.notes, trackingType: se.trackingType
     })),
     overallNotes: s.overallNotes, savedAsTemplateUpdate
   };
@@ -1843,15 +1868,12 @@ function renderHistoryDetail(id){
   const r = State.records.find(x=>x.id===id);
   if (!r){ App.backToHistoryList(); return ''; }
   const exHtml = r.exercises.map((se, idx) => {
-    const isDistance = exerciseById(se.exerciseId)?.trackingType === 'distance_reps' || se.sets.some(s=>s.distance!==undefined);
+    const trackingType = se.trackingType || exerciseById(se.exerciseId)?.trackingType
+      || (se.sets.some(s=>s.distance!==undefined) ? 'distance_reps' : 'weight_reps');
     const setsHtml = se.sets.map((st, si) => `
       <div class="flex items-center gap-2 mb-1 text-sm">
         <span class="w-5 text-xs text-center" style="color:var(--text2)">${st.setNumber}</span>
-        ${isDistance
-          ? `<input class="input" type="number" step="0.01" value="${st.distance!==undefined?toDisplayDistance(st.distance):''}" oninput="App.histUpdateSet(${idx},${si},'distance',this.value)">`
-          : `<input class="input" type="number" step="0.5" value="${st.weight!==undefined?toDisplayWeight(st.weight):''}" oninput="App.histUpdateSet(${idx},${si},'weight',this.value)">`
-        }
-        <input class="input" type="number" value="${st.reps||''}" oninput="App.histUpdateSet(${idx},${si},'reps',this.value)">
+        ${renderTrackingInputs(trackingType, st, 'App.histUpdateSet', idx, si)}
         <button onclick="App.histToggleComplete(${idx},${si})" class="w-8 h-8 rounded-lg shrink-0" style="background:${st.completed?'var(--primary)':'var(--input-bg)'}; border:1px solid var(--border); color:${st.completed?'#fff':'var(--text2)'}">✓</button>
       </div>
     `).join('');
@@ -1878,9 +1900,7 @@ function renderHistoryDetail(id){
 App.histUpdateSet = function(idx, si, field, val){
   const r = State.records.find(x=>x.id===State.historyView.openId);
   const s = r.exercises[idx].sets[si];
-  if (field==='weight') s.weight = toStoreWeight(val);
-  else if (field==='distance') s.distance = toStoreDistance(val);
-  else s.reps = parseInt(val)||0;
+  applySetFieldUpdate(s, field, val);
   dbPut('records', r);
 };
 App.histToggleComplete = function(idx, si){

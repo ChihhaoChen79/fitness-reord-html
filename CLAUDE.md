@@ -40,6 +40,11 @@ Because `App.render()` replaces the whole tab's `innerHTML`, any text/number inp
 ### Units
 Internally everything is stored metric (kg / km). `State.settings.unit` (`metric`/`imperial`) only affects display: `toDisplayWeight`/`toDisplayDistance` convert for rendering, `toStoreWeight`/`toStoreDistance` convert user input back to metric before it's saved. Never store imperial values.
 
+### Tracking types (per-exercise set fields)
+`TRACKING_TYPES` lists the four field combinations a set row can have: `weight_reps` (重量×次數), `distance_reps` (距離 in km/mi × 時間(分), unit-converted like weight), `distance_m_reps` (距離 in **raw meters, never unit-converted** × 時間(秒) — for sprints, where km/mi would be silly), and `reps_only` (just 次數, for things like jump rope with no weight or distance dimension). A set is still just `{setNumber, weight?, distance?, reps, completed}` regardless of type — `distance_m_reps` reuses the `distance` field but stores a literal meter value instead of a unit-converted one, and `reps_only` simply never populates `weight`/`distance`.
+
+Any place that renders a set row's inputs or writes to a set from one should go through the shared helpers rather than re-implementing the weight/distance/reps branching: `renderTrackingInputs(trackingType, set, updateFnName, idx, si)` returns the right `<input>`(s) for a type (used by the routine editor, live/backfill session, and History's edit view), `applySetFieldUpdate(set, field, val)` handles the write side (field is `'weight'`, `'distance'`, `'distanceMeters'`, or defaults to reps), and `formatSetSummary(trackingType, set)` renders the "previous value" hint text. Records snapshot `trackingType` per exercise at `finishSession` time (alongside the existing name/template snapshots) so a record's field layout in History stays correct even if the source exercise is later edited or deleted.
+
 ### Workout sessions (live vs. backfill)
 `State.session` represents both a live, "started now" workout and a backfilled past workout — they share one render/save path (`renderSession()`, `App.finishSession()`), branching on `session.isBackfill`:
 - Live sessions get a running `#sessionTimer` (via `App.startSessionTimer()` / `attachSessionTimerDisplay()`), and `finishSession()` uses `nowISO()` as `endTime`.
