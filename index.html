@@ -277,8 +277,8 @@ function formatSetSummary(trackingType, set){
 
 /* ============================== IndexedDB ============================== */
 const DB_NAME = 'fitnessTrackerDB';
-const DB_VERSION = 2;
-const STORES = ['exercises','templates','records','bodyMetrics','tags','students'];
+const DB_VERSION = 3;
+const STORES = ['exercises','templates','records','bodyMetrics','tags','students','aiSuggestions'];
 let dbInstance = null;
 
 function openDB(){
@@ -458,12 +458,14 @@ async function seedIfEmpty(){
 /* ============================== Settings / Draft ============================== */
 const SETTINGS_KEY = 'ft_settings';
 const DRAFT_KEY = 'ft_draft_session';
+const AI_SETTINGS_DEFAULTS = { aiModel:'gemini-2.0-flash', aiMonthlyLimit:4 };
 function loadSettings(){
+  const defaults = { unit:'metric', theme:'auto', language:'zh-TW', coachMode:false, ...AI_SETTINGS_DEFAULTS };
   try{
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return Object.assign({ unit:'metric', theme:'auto', language:'zh-TW', coachMode:false }, JSON.parse(raw));
+    if (raw) return Object.assign(defaults, JSON.parse(raw));
   }catch(e){}
-  return { unit:'metric', theme:'auto', language:'zh-TW', coachMode:false };
+  return defaults;
 }
 function saveSettings(s){
   try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }catch(e){}
@@ -487,12 +489,35 @@ const CURRENT_PROFILE_KEY = 'ft_current_profile';
 function loadCurrentProfileId(){ try{ return localStorage.getItem(CURRENT_PROFILE_KEY) || 'self'; }catch(e){ return 'self'; } }
 function saveCurrentProfileId(id){ try{ localStorage.setItem(CURRENT_PROFILE_KEY, id); }catch(e){} }
 
+/* ---- AI 訓練建議：API 金鑰與用量計數一律只存在這台裝置，絕不進備份匯出檔 ---- */
+const GEMINI_KEY_STORAGE = 'ft_gemini_api_key';
+const AI_USAGE_STORAGE = 'ft_ai_usage';
+function loadGeminiApiKey(){ try{ return localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }catch(e){ return ''; } }
+function saveGeminiApiKey(key){ try{ if (key) localStorage.setItem(GEMINI_KEY_STORAGE, key); else localStorage.removeItem(GEMINI_KEY_STORAGE); }catch(e){} }
+function currentMonthPeriod(){ const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; }
+function getAiUsageInfo(){
+  let info = { period: currentMonthPeriod(), count: 0 };
+  try{
+    const raw = localStorage.getItem(AI_USAGE_STORAGE);
+    if (raw) info = JSON.parse(raw);
+  }catch(e){}
+  if (info.period !== currentMonthPeriod()) info = { period: currentMonthPeriod(), count: 0 };
+  return info;
+}
+function incrementAiUsage(){
+  const info = getAiUsageInfo();
+  info.count += 1;
+  try{ localStorage.setItem(AI_USAGE_STORAGE, JSON.stringify(info)); }catch(e){}
+  return info;
+}
+
 /* ============================== State ============================== */
 const State = {
   tab: 'home',
   settings: loadSettings(),
-  exercises: [], templates: [], tags: [], records: [], bodyMetrics: [], students: [],
+  exercises: [], templates: [], tags: [], records: [], bodyMetrics: [], students: [], aiSuggestions: [],
   currentProfileId: loadCurrentProfileId(),
+  geminiApiKey: loadGeminiApiKey(),
   exercisesView: { category:'全部', equipment:'全部', search:'', viewMode:'all', subview:'list', editId:null },
   templatesView: { subview:'list', editId:null, draft:null },
   historyView: { subview:'list', openId:null, editBuffer:null },
@@ -558,8 +583,8 @@ App.init = async function(){
 };
 
 App.reloadAll = async function(){
-  const [exercises, templates, tags, records, bodyMetrics, students] = await Promise.all([
-    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('tags'), dbGetAll('records'), dbGetAll('bodyMetrics'), dbGetAll('students')
+  const [exercises, templates, tags, records, bodyMetrics, students, aiSuggestions] = await Promise.all([
+    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('tags'), dbGetAll('records'), dbGetAll('bodyMetrics'), dbGetAll('students'), dbGetAll('aiSuggestions')
   ]);
   State.exercises = exercises.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
   State.templates = templates.sort((a,b)=> new Date(b.updatedAt)-new Date(a.updatedAt));
@@ -567,6 +592,7 @@ App.reloadAll = async function(){
   State.records = records.sort((a,b)=> new Date(b.startTime)-new Date(a.startTime));
   State.bodyMetrics = bodyMetrics.sort((a,b)=> new Date(b.recordedAt)-new Date(a.recordedAt));
   State.students = students.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
+  State.aiSuggestions = aiSuggestions.sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
   if (!getAllProfiles().some(p => p.id === State.currentProfileId)){
     State.currentProfileId = 'self';
     saveCurrentProfileId('self');
@@ -599,6 +625,9 @@ function recordsForCurrentProfile(){
 }
 function bodyMetricsForCurrentProfile(){
   return State.bodyMetrics.filter(m => (m.profileId || 'self') === State.currentProfileId);
+}
+function aiSuggestionsForCurrentProfile(){
+  return State.aiSuggestions.filter(s => (s.profileId || 'self') === State.currentProfileId);
 }
 App.setCurrentProfile = function(id){
   State.currentProfileId = id;
@@ -1818,6 +1847,178 @@ App.confirmSaveAsTemplate = async function(recordId){
   App.toast(pickMotivation(), 3200);
 };
 
+/* ============================== AI 訓練建議（選用，需使用者自備 Gemini API Key） ============================== */
+function buildTrainingSummaryText(profileId){
+  const WINDOW_DAYS = 60;
+  const since = new Date(); since.setDate(since.getDate() - WINDOW_DAYS);
+  const profile = profileById(profileId);
+  const recs = State.records
+    .filter(r => (r.profileId||'self')===profileId && new Date(r.startTime) >= since)
+    .sort((a,b)=> new Date(a.startTime)-new Date(b.startTime));
+
+  if (!recs.length){
+    return `對象：${profile.name}\n最近 ${WINDOW_DAYS} 天沒有任何訓練紀錄。`;
+  }
+
+  const perWeek = Math.round((recs.length/(WINDOW_DAYS/7))*10)/10;
+  const muscleCounts = {};
+  const exerciseStats = {};
+  recs.forEach(r => {
+    r.exercises.forEach(e => {
+      const ex = exerciseById(e.exerciseId);
+      (ex?.muscleGroups||[]).forEach(m => muscleCounts[m]=(muscleCounts[m]||0)+1);
+      const key = e.exerciseId;
+      if (!exerciseStats[key]) exerciseStats[key] = {
+        name: e.exerciseNameSnapshot, trackingType: e.trackingType || ex?.trackingType || 'weight_reps',
+        count: 0, firstMaxWeight: null, lastMaxWeight: null,
+      };
+      const st = exerciseStats[key];
+      st.count += 1;
+      if (st.trackingType === 'weight_reps'){
+        const maxW = Math.max(0, ...e.sets.filter(s=>s.completed).map(s=>s.weight||0));
+        if (maxW > 0){
+          if (st.firstMaxWeight === null) st.firstMaxWeight = maxW;
+          st.lastMaxWeight = maxW;
+        }
+      }
+    });
+  });
+
+  const muscleLines = Object.entries(muscleCounts).sort((a,b)=>b[1]-a[1])
+    .map(([m,c]) => `${m} ${c}次`).join('、') || '無';
+
+  const topExercises = Object.values(exerciseStats).sort((a,b)=>b.count-a.count).slice(0,8)
+    .map(ex => {
+      if (ex.trackingType==='weight_reps' && ex.firstMaxWeight!==null){
+        const change = ex.lastMaxWeight - ex.firstMaxWeight;
+        const trend = change>0 ? `進步 ${toDisplayWeight(change)}${weightLabel()}` : (change<0 ? `下降 ${toDisplayWeight(-change)}${weightLabel()}` : '持平');
+        return `- ${ex.name}：做了 ${ex.count} 次，最大重量從 ${toDisplayWeight(ex.firstMaxWeight)}${weightLabel()} 到 ${toDisplayWeight(ex.lastMaxWeight)}${weightLabel()}（${trend}）`;
+      }
+      return `- ${ex.name}：做了 ${ex.count} 次`;
+    }).join('\n');
+
+  const bms = State.bodyMetrics
+    .filter(m => (m.profileId||'self')===profileId && new Date(m.recordedAt) >= since)
+    .sort((a,b)=> new Date(a.recordedAt)-new Date(b.recordedAt));
+  let bodyLine = '無體重/體脂紀錄';
+  if (bms.length){
+    const first = bms[0], last = bms[bms.length-1];
+    const wChange = last.weight - first.weight;
+    bodyLine = `體重從 ${toDisplayWeight(first.weight)}${weightLabel()} 到 ${toDisplayWeight(last.weight)}${weightLabel()}（${wChange>=0?'+':''}${toDisplayWeight(wChange)}${weightLabel()}）`;
+    if (last.bodyFat!==undefined && last.bodyFat!==null) bodyLine += `，最新體脂 ${last.bodyFat}%`;
+  }
+
+  return [
+    `對象：${profile.name}`,
+    `統計區間：最近 ${WINDOW_DAYS} 天（${fmtDate(since)} ～ ${fmtDate(new Date())}）`,
+    `總訓練次數：${recs.length} 次，平均每週約 ${perWeek} 次`,
+    `部位訓練次數分佈：${muscleLines}`,
+    `主要動作表現：`,
+    topExercises || '（無）',
+    `身體數據：${bodyLine}`,
+  ].join('\n');
+}
+const AI_SUGGESTION_PROMPT_PREFIX = '你是一位溫暖、專業又鼓勵人心的健身教練。請根據以下訓練摘要，給使用者具體、可執行的建議（例如訓練量是否足夠、部位分配是否失衡、哪些動作可以考慮增加重量、恢復是否足夠等），用溫暖但專業的繁體中文回答，控制在300字以內，不需要重複摘要內容本身：\n\n';
+async function callGeminiApi(promptText){
+  if (!State.geminiApiKey) throw new Error('尚未設定 Gemini API Key');
+  const model = State.settings.aiModel || AI_SETTINGS_DEFAULTS.aiModel;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(State.geminiApiKey)}`;
+  let res;
+  try{
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] }),
+    });
+  }catch(e){
+    throw new Error('無法連線到 Gemini API，請檢查網路連線');
+  }
+  if (res.status === 401 || res.status === 403) throw new Error('API Key 無效或沒有權限，請確認「設定」頁的 Gemini API Key 是否正確');
+  if (res.status === 429) throw new Error('已達到 Gemini 免費額度上限，請稍後再試');
+  if (!res.ok) throw new Error(`Gemini API 回應錯誤（狀態碼 ${res.status}）`);
+  let data;
+  try{ data = await res.json(); }catch(e){ throw new Error('Gemini API 回應格式錯誤'); }
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini 沒有回傳有效內容（可能被安全機制擋下），請稍後再試');
+  return text.trim();
+}
+function renderAiSuggestionCard(){
+  const hasKey = !!State.geminiApiKey;
+  const usage = getAiUsageInfo();
+  const limit = State.settings.aiMonthlyLimit || AI_SETTINGS_DEFAULTS.aiMonthlyLimit;
+  const remaining = Math.max(0, limit - usage.count);
+  const latest = aiSuggestionsForCurrentProfile()[0];
+  const older = aiSuggestionsForCurrentProfile().slice(1, 6);
+
+  const btnLabel = latest ? '重新產生 AI 建議' : '產生 AI 建議';
+  const btnDisabled = !hasKey || remaining <= 0;
+  const btnHint = !hasKey ? '請先到「設定」頁輸入 Gemini API Key' : (remaining<=0 ? '本月已達使用上限' : '');
+
+  return `
+    <div class="card p-4 mb-4">
+      <div class="flex justify-between items-center mb-2">
+        <div class="font-bold text-sm">🤖 AI 訓練建議</div>
+        <div class="text-2xs" style="color:var(--text2)">本月還可用 ${remaining} 次</div>
+      </div>
+      ${latest ? `
+        <div class="text-xs mb-2" style="color:var(--text2)">產生於 ${fmtDate(latest.createdAt)} ${fmtTime(latest.createdAt)}</div>
+        <div class="text-sm mb-3" style="white-space:pre-wrap;">${escapeHtml(latest.suggestionText)}</div>
+      ` : `<div class="text-sm mb-3" style="color:var(--text2)">還沒有產生過 AI 建議，點下方按鈕開始分析最近的訓練狀況。</div>`}
+      <button class="btn btn-primary w-full" ${btnDisabled?'disabled style="opacity:.5;"':''} onclick="App.generateAiSuggestion()">${btnLabel}</button>
+      ${btnHint ? `<div class="text-2xs mt-1 text-center" style="color:var(--text2)">${btnHint}</div>` : ''}
+      ${older.length ? `
+        <details class="mt-3">
+          <summary class="text-xs" style="color:var(--text2)">查看過去的建議（${older.length}）</summary>
+          ${older.map(s => `
+            <div class="mt-2 pt-2" style="border-top:1px solid var(--border);">
+              <div class="text-2xs mb-1" style="color:var(--text2)">${fmtDate(s.createdAt)} ${fmtTime(s.createdAt)}</div>
+              <div class="text-xs" style="white-space:pre-wrap; color:var(--text2);">${escapeHtml(s.suggestionText)}</div>
+            </div>
+          `).join('')}
+        </details>
+      ` : ''}
+    </div>
+  `;
+}
+App.generateAiSuggestion = async function(){
+  if (!State.geminiApiKey){ App.toast('請先到「設定」頁輸入 Gemini API Key'); return; }
+  const usage = getAiUsageInfo();
+  const limit = State.settings.aiMonthlyLimit || AI_SETTINGS_DEFAULTS.aiMonthlyLimit;
+  if (usage.count >= limit){ App.toast('本月的 AI 建議次數已用完'); return; }
+
+  const profileId = State.currentProfileId;
+  const summary = buildTrainingSummaryText(profileId);
+
+  App.showModalHtml(`
+    <div class="font-bold text-base mb-3 modal-header">即將傳送以下訓練摘要給 Gemini AI</div>
+    <div class="text-xs mb-3" style="white-space:pre-wrap; color:var(--text2); background:var(--input-bg); border-radius:10px; padding:10px;">${escapeHtml(summary)}</div>
+    <div class="text-xs mb-4" style="color:var(--text2)">這筆摘要只會傳送給 Google Gemini API 做這次分析，不會存在任何第三方伺服器上（由你的裝置直接呼叫）。</div>
+    <div class="flex gap-2">
+      <button class="btn btn-secondary flex-1" id="aiCancelBtn">取消</button>
+      <button class="btn btn-primary flex-1" id="aiConfirmBtn">確認送出</button>
+    </div>
+  `);
+  document.getElementById('aiCancelBtn').onclick = () => App.closeModal();
+  document.getElementById('aiConfirmBtn').onclick = async () => {
+    App.showModalHtml(`<div class="text-center py-6 text-sm" style="color:var(--text2)">分析中，請稍候…</div>`);
+    try{
+      const suggestionText = await callGeminiApi(AI_SUGGESTION_PROMPT_PREFIX + summary);
+      await dbPut('aiSuggestions', {
+        id: uid(), profileId, createdAt: nowISO(),
+        rangeStart: null, rangeEnd: null, summaryText: summary, suggestionText,
+      });
+      incrementAiUsage();
+      await App.reloadAll();
+      App.closeModal();
+      App.render();
+      App.toast('已產生新的 AI 訓練建議');
+    }catch(err){
+      App.closeModal();
+      App.toast(err.message || 'AI 建議產生失敗');
+    }
+  };
+};
+
 /* ============================== HISTORY TAB (紀錄) ============================== */
 function renderHistoryTab(){
   const v = State.historyView;
@@ -1827,7 +2028,7 @@ function renderHistoryTab(){
   const records = recordsForCurrentProfile();
 
   if (!records.length){
-    return pageWrap('訓練紀錄', backfillBtn, `${renderProfileSelector()}<div class="text-sm text-center py-8" style="color:var(--text2)">還沒有任何訓練紀錄</div>`);
+    return pageWrap('訓練紀錄', backfillBtn, `${renderProfileSelector()}${renderAiSuggestionCard()}<div class="text-sm text-center py-8" style="color:var(--text2)">還沒有任何訓練紀錄</div>`);
   }
   const groups = {};
   records.forEach(r => {
@@ -1851,7 +2052,7 @@ function renderHistoryTab(){
     return `<div class="text-xs font-bold mt-3 mb-1" style="color:var(--text2)">${y}年${parseInt(m)}月</div>${items}`;
   }).join('');
 
-  return pageWrap('訓練紀錄', backfillBtn, renderProfileSelector() + html);
+  return pageWrap('訓練紀錄', backfillBtn, renderProfileSelector() + renderAiSuggestionCard() + html);
 }
 App.openHistoryDetail = function(id){
   State.historyView.subview = 'detail';
@@ -2173,6 +2374,30 @@ function renderSettingsTab(){
     </div>
 
     <div class="card p-4 mb-4">
+      <div class="font-bold text-sm mb-3">AI 訓練建議（選用）</div>
+      <div class="text-xs mb-3" style="color:var(--text2)">在「紀錄」頁可以用 AI 分析最近的訓練狀況並給建議。這個功能需要你自己到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--primary)">Google AI Studio</a> 申請一組免費的 Gemini API Key。分析時會把訓練摘要傳送給 Google Gemini API；金鑰只存在這台裝置的瀏覽器裡，不會出現在備份匯出檔案中。</div>
+      <div class="space-y-2">
+        <div>
+          <label class="text-xs" style="color:var(--text2)">Gemini API Key</label>
+          <input id="geminiKeyInput" type="password" class="input mt-1" placeholder="貼上你的 API Key" value="${escapeHtml(State.geminiApiKey)}">
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary flex-1" onclick="App.toggleGeminiKeyVisibility()">顯示/隱藏</button>
+          <button class="btn btn-primary flex-1" onclick="App.saveGeminiApiKeyFromInput()">儲存</button>
+          <button class="btn btn-danger" style="padding:10px 14px;" onclick="App.clearGeminiApiKey()">清除</button>
+        </div>
+        <div>
+          <label class="text-xs" style="color:var(--text2)">模型名稱（若日後 Google 更新模型名稱，可在此調整）</label>
+          <input id="geminiModelInput" class="input mt-1" value="${escapeHtml(s.aiModel)}" onchange="App.setAiModel(this.value)">
+        </div>
+        <div>
+          <label class="text-xs" style="color:var(--text2)">每月使用上限（次）</label>
+          <input id="geminiLimitInput" type="number" min="1" class="input mt-1" value="${s.aiMonthlyLimit}" onchange="App.setAiMonthlyLimit(this.value)">
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
       <div class="font-bold text-sm mb-3">自訂標籤</div>
       <div class="flex gap-2 flex-wrap mb-3">
         ${State.tags.map(t=>`<span class="chip flex items-center gap-1">${escapeHtml(t.name)} <button onclick="App.deleteTag('${t.id}')" style="color:var(--danger)">✕</button></span>`).join('') || '<span class="text-sm" style="color:var(--text2)">尚無標籤</span>'}
@@ -2208,6 +2433,31 @@ App.setCoachMode = function(on){
   saveSettings(State.settings);
   if (!on) App.setCurrentProfile('self');
   App.render();
+};
+App.toggleGeminiKeyVisibility = function(){
+  const input = document.getElementById('geminiKeyInput');
+  if (input) input.type = input.type === 'password' ? 'text' : 'password';
+};
+App.saveGeminiApiKeyFromInput = function(){
+  const val = document.getElementById('geminiKeyInput').value.trim();
+  State.geminiApiKey = val;
+  saveGeminiApiKey(val);
+  App.toast(val ? '已儲存 API Key' : '已清空 API Key');
+};
+App.clearGeminiApiKey = function(){
+  State.geminiApiKey = '';
+  saveGeminiApiKey('');
+  App.render();
+  App.toast('已清除 API Key');
+};
+App.setAiModel = function(val){
+  State.settings.aiModel = val.trim() || AI_SETTINGS_DEFAULTS.aiModel;
+  saveSettings(State.settings);
+};
+App.setAiMonthlyLimit = function(val){
+  const n = Math.max(1, parseInt(val)||AI_SETTINGS_DEFAULTS.aiMonthlyLimit);
+  State.settings.aiMonthlyLimit = n;
+  saveSettings(State.settings);
 };
 App.setTheme = function(t){ State.settings.theme = t; saveSettings(State.settings); applyTheme(t); App.render(); };
 App.openUsageGuide = function(){
@@ -2260,13 +2510,13 @@ App.deleteTag = async function(id){
 };
 
 App.exportData = async function(){
-  const [exercises, templates, records, bodyMetrics, tags, students] = await Promise.all([
-    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('records'), dbGetAll('bodyMetrics'), dbGetAll('tags'), dbGetAll('students')
+  const [exercises, templates, records, bodyMetrics, tags, students, aiSuggestions] = await Promise.all([
+    dbGetAll('exercises'), dbGetAll('templates'), dbGetAll('records'), dbGetAll('bodyMetrics'), dbGetAll('tags'), dbGetAll('students'), dbGetAll('aiSuggestions')
   ]);
   const payload = {
     exportedAt: nowISO(), version: 1,
     settings: State.settings,
-    exercises, templates, records, bodyMetrics, tags, students
+    exercises, templates, records, bodyMetrics, tags, students, aiSuggestions
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2296,6 +2546,7 @@ App.importData = function(event){
       if (Array.isArray(data.bodyMetrics)) await dbBulkPut('bodyMetrics', data.bodyMetrics);
       if (Array.isArray(data.tags)) await dbBulkPut('tags', data.tags);
       if (Array.isArray(data.students)) await dbBulkPut('students', data.students);
+      if (Array.isArray(data.aiSuggestions)) await dbBulkPut('aiSuggestions', data.aiSuggestions);
       if (data.settings){ State.settings = Object.assign(loadSettings(), data.settings); saveSettings(State.settings); applyTheme(State.settings.theme); }
       await seedIfEmpty();
       await App.reloadAll();
