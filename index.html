@@ -1935,12 +1935,30 @@ async function callGeminiApi(promptText){
   }
   if (res.status === 401 || res.status === 403) throw new Error('API Key 無效或沒有權限，請確認「設定」頁的 Gemini API Key 是否正確');
   if (res.status === 429) throw new Error('已達到 Gemini 免費額度上限，請稍後再試');
+  if (res.status === 404) throw new Error(`找不到模型「${model}」，請到「設定」頁用「測試金鑰並選擇模型」重新選一個目前可用的模型名稱`);
   if (!res.ok) throw new Error(`Gemini API 回應錯誤（狀態碼 ${res.status}）`);
   let data;
   try{ data = await res.json(); }catch(e){ throw new Error('Gemini API 回應格式錯誤'); }
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Gemini 沒有回傳有效內容（可能被安全機制擋下），請稍後再試');
   return text.trim();
+}
+async function listGeminiModels(){
+  if (!State.geminiApiKey) throw new Error('尚未設定 Gemini API Key');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(State.geminiApiKey)}`;
+  let res;
+  try{ res = await fetch(url); }
+  catch(e){ throw new Error('無法連線到 Gemini API，請檢查網路連線'); }
+  if (res.status === 401 || res.status === 403) throw new Error('API Key 無效或沒有權限，請確認「設定」頁的 Gemini API Key 是否正確');
+  if (!res.ok) throw new Error(`Gemini API 回應錯誤（狀態碼 ${res.status}）`);
+  let data;
+  try{ data = await res.json(); }catch(e){ throw new Error('Gemini API 回應格式錯誤'); }
+  const models = (data.models || [])
+    .filter(m => (m.supportedGenerationMethods||[]).includes('generateContent'))
+    .map(m => (m.name||'').replace(/^models\//, ''))
+    .filter(Boolean);
+  if (!models.length) throw new Error('這組金鑰目前沒有支援產生內容的可用模型');
+  return models;
 }
 function renderAiSuggestionCard(){
   const hasKey = !!State.geminiApiKey;
@@ -2387,8 +2405,9 @@ function renderSettingsTab(){
           <button class="btn btn-danger" style="padding:10px 14px;" onclick="App.clearGeminiApiKey()">清除</button>
         </div>
         <div>
-          <label class="text-xs" style="color:var(--text2)">模型名稱（若日後 Google 更新模型名稱，可在此調整）</label>
+          <label class="text-xs" style="color:var(--text2)">模型名稱（若出現「找不到模型」404 錯誤，表示 Google 已經更新模型名稱，請用下面按鈕重新選擇）</label>
           <input id="geminiModelInput" class="input mt-1" value="${escapeHtml(s.aiModel)}" onchange="App.setAiModel(this.value)">
+          <button class="btn btn-secondary w-full mt-2" onclick="App.testGeminiModels()">測試金鑰並選擇模型</button>
         </div>
         <div>
           <label class="text-xs" style="color:var(--text2)">每月使用上限（次）</label>
@@ -2458,6 +2477,30 @@ App.setAiMonthlyLimit = function(val){
   const n = Math.max(1, parseInt(val)||AI_SETTINGS_DEFAULTS.aiMonthlyLimit);
   State.settings.aiMonthlyLimit = n;
   saveSettings(State.settings);
+};
+App.testGeminiModels = async function(){
+  const keyInput = document.getElementById('geminiKeyInput');
+  if (keyInput && keyInput.value.trim()){ State.geminiApiKey = keyInput.value.trim(); saveGeminiApiKey(State.geminiApiKey); }
+  if (!State.geminiApiKey){ App.toast('請先輸入 Gemini API Key'); return; }
+  App.showModalHtml(`<div class="text-center py-6 text-sm" style="color:var(--text2)">正在查詢可用模型…</div>`);
+  try{
+    const models = await listGeminiModels();
+    App.showModalHtml(`
+      <div class="font-bold text-base mb-3 modal-header">選擇模型</div>
+      <div class="text-xs mb-3" style="color:var(--text2)">以下是這組 API Key 目前可用的模型，點選即可套用：</div>
+      ${models.map(m => `<button class="card p-3 mb-2 w-full text-left" onclick="App.pickGeminiModel('${m}')">${escapeHtml(m)}</button>`).join('')}
+    `);
+  }catch(err){
+    App.closeModal();
+    App.toast(err.message || '查詢模型失敗');
+  }
+};
+App.pickGeminiModel = function(model){
+  State.settings.aiModel = model;
+  saveSettings(State.settings);
+  App.closeModal();
+  App.render();
+  App.toast(`已選擇模型「${model}」`);
 };
 App.setTheme = function(t){ State.settings.theme = t; saveSettings(State.settings); applyTheme(t); App.render(); };
 App.openUsageGuide = function(){
